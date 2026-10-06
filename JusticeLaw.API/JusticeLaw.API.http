@@ -1,4 +1,4 @@
-@JusticeLaw.API_HostAddress = http://localhost:5071
+@JusticeLaw.API_HostAddress = http://localhost:5293
 
 GET {{JusticeLaw.API_HostAddress}}/weatherforecast/
 Accept: application/json
