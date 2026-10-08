@@ -1,7 +1,15 @@
-﻿import { Outlet, useNavigate } from 'react-router-dom';
-import { Button, Badge } from 'react-bootstrap';
+import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import Icon from './Icon';
+import { Avatar } from './ui';
 import { useAuth } from '../context/AuthContext';
+import { DataProvider } from '../context/DataContext';
+
+const roleTitle = {
+  Admin: 'Administrator',
+  Attorney: 'Attorney',
+  Client: 'Client',
+};
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -13,18 +21,35 @@ export default function Layout() {
   };
 
   return (
-    <div className="app-shell">
-      <Sidebar role={user.role} />
-      <div className="app-main">
-        <header className="app-topbar">
-          <span className="fw-semibold">{user.name}</span>
-          <Badge bg="warning" text="dark">{user.role}</Badge>
-          <Button size="sm" variant="outline-danger" onClick={handleLogout}>Logout</Button>
-        </header>
-        <main className="app-content">
-          <Outlet />
-        </main>
+    <DataProvider>
+      <div className="app-shell">
+        <Sidebar role={user.role} />
+        <div className="app-main">
+          <header className="app-topbar">
+            <div className="topbar-title">
+              JusticeLaw Attorneys
+              <small>Law Firm Management Portal</small>
+            </div>
+            <div className="topbar-right">
+              <span className="role-pill">{roleTitle[user.role] || user.role}</span>
+              <div className="user-chip">
+                <div className="user-meta">
+                  <strong>{user.name}</strong>
+                  <span>{roleTitle[user.role] || user.role}</span>
+                </div>
+                <Avatar name={user.name} size={38} />
+              </div>
+              <button type="button" className="btn-logout" onClick={handleLogout}>
+                <Icon name="logout" size={16} />
+                <span>Logout</span>
+              </button>
+            </div>
+          </header>
+          <main className="app-content">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </DataProvider>
   );
 }

@@ -1,8 +1,7 @@
-﻿export default function ComingSoon({ title }) {
+import { PageHeader } from './ui';
+
+export default function ComingSoon({ title }) {
   return (
-    <div>
-      <h3>{title}</h3>
-      <p className="text-muted">This screen is coming soon.</p>
-    </div>
+    <PageHeader title={title} subtitle="This screen is coming soon." />
   );
 }
