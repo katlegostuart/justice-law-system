@@ -1,200 +1,198 @@
-﻿import { useState } from 'react';
-import { Row, Col, Card, Form, Button, Table, Modal, Alert, InputGroup } from 'react-bootstrap';
-import { mockClients } from '../../services/mockData';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Row, Col, Modal, Button, Alert, Form } from 'react-bootstrap';
+import Icon from '../../components/Icon';
+import { Avatar, PageHeader, StatCard, Pager } from '../../components/ui';
+import { useData } from '../../context/DataContext';
 
-const emptyForm = {
-  firstName: '', surname: '', gender: '', dateOfBirth: '',
-  idNumber: '', email: '', phone: '', address: '',
-};
-
-function nextClientNumber(clients) {
-  const highest = clients.reduce(
-    (max, c) => Math.max(max, parseInt(c.clientNumber.replace('CLI-', ''), 10)), 0);
-  return 'CLI-' + String(highest + 1).padStart(4, '0');
-}
-
-function validate(form) {
-  const errors = {};
-  if (!form.firstName.trim()) errors.firstName = 'First name is required';
-  if (!form.surname.trim()) errors.surname = 'Surname is required';
-  if (!form.gender) errors.gender = 'Please select a gender';
-  if (!form.dateOfBirth) errors.dateOfBirth = 'Date of birth is required';
-  else if (new Date(form.dateOfBirth) > new Date()) errors.dateOfBirth = 'Date of birth cannot be in the future';
-  if (!form.idNumber.trim()) errors.idNumber = 'ID or passport number is required';
-  if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Enter a valid email address';
-  if (!/^\+?[0-9 ()-]{9,15}$/.test(form.phone)) errors.phone = 'Enter a valid phone number';
-  if (!form.address.trim()) errors.address = 'Address is required';
-  return errors;
-}
+const PAGE_SIZE = 6;
+const GENDERS = ['Male', 'Female', 'Other'];
 
 export default function Clients() {
-  const [clients, setClients] = useState(mockClients);
+  const { clients, setClients, cases } = useData();
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState(emptyForm);
-  const [editingNumber, setEditingNumber] = useState(null);
-  const [errors, setErrors] = useState({});
-  const [message, setMessage] = useState('');
+  const [genderFilter, setGenderFilter] = useState('All');
+  const [casesFilter, setCasesFilter] = useState('All');
   const [toDelete, setToDelete] = useState(null);
 
+  // The form page sends back a message and the client it just saved
+  const [message, setMessage] = useState(location.state?.message || '');
+  const [page, setPage] = useState(() => {
+    const focus = location.state?.focus;
+    const index = focus ? clients.findIndex((c) => c.clientNumber === focus) : -1;
+    return index >= 0 ? Math.floor(index / PAGE_SIZE) + 1 : 1;
+  });
+
+  useEffect(() => {
+    // clear the message from the browser history so it does not come back on refresh
+    if (location.state) navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const caseCount = (clientNumber) => cases.filter((c) => c.clientNumber === clientNumber).length;
+
+  // ---- stats ----
+  const withCases = clients.filter((c) => caseCount(c.clientNumber) > 0).length;
+  const females = clients.filter((c) => c.gender === 'Female').length;
+  const males = clients.filter((c) => c.gender === 'Male').length;
+
+  // ---- search + filters ----
   const term = search.trim().toLowerCase();
-  const visible = clients.filter((c) =>
-    (c.clientNumber + ' ' + c.firstName + ' ' + c.surname).toLowerCase().includes(term));
+  const filtered = clients.filter((c) => {
+    const text = `${c.clientNumber} ${c.firstName} ${c.surname}`.toLowerCase();
+    if (term && !text.includes(term)) return false;
+    if (genderFilter !== 'All' && c.gender !== genderFilter) return false;
+    if (casesFilter === 'With cases' && caseCount(c.clientNumber) === 0) return false;
+    if (casesFilter === 'No cases' && caseCount(c.clientNumber) > 0) return false;
+    return true;
+  });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const rows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const filtersActive = term || genderFilter !== 'All' || casesFilter !== 'All';
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-
-  const resetForm = () => {
-    setForm(emptyForm);
-    setEditingNumber(null);
-    setErrors({});
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const found = validate(form);
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
-
-    if (editingNumber) {
-      setClients(clients.map((c) => (c.clientNumber === editingNumber ? { ...c, ...form } : c)));
-      setMessage('Client ' + editingNumber + ' updated.');
-    } else {
-      const clientNumber = nextClientNumber(clients);
-      setClients([...clients, { clientNumber, ...form }]);
-      setMessage('Client ' + clientNumber + ' registered.');
-    }
-    resetForm();
-  };
-
-  const startEdit = (client) => {
-    const { clientNumber, ...fields } = client;
-    setForm(fields);
-    setEditingNumber(clientNumber);
-    setErrors({});
-    setMessage('');
+  const clearFilters = () => {
+    setSearch('');
+    setGenderFilter('All');
+    setCasesFilter('All');
+    setPage(1);
   };
 
   const confirmDelete = () => {
     setClients(clients.filter((c) => c.clientNumber !== toDelete.clientNumber));
-    setMessage('Client ' + toDelete.clientNumber + ' deleted.');
-    if (editingNumber === toDelete.clientNumber) resetForm();
+    setMessage(`Client ${toDelete.clientNumber} deleted.`);
     setToDelete(null);
   };
 
-  const field = (name, label, type = 'text') => (
-    <Form.Group className="mb-2">
-      <Form.Label className="small fw-semibold">{label}</Form.Label>
-      <Form.Control
-        type={type}
-        name={name}
-        value={form[name]}
-        onChange={handleChange}
-        isInvalid={!!errors[name]}
-      />
-      <Form.Control.Feedback type="invalid">{errors[name]}</Form.Control.Feedback>
-    </Form.Group>
-  );
+  const deleteBlocked = toDelete && caseCount(toDelete.clientNumber) > 0;
 
   return (
     <>
-      <h3 className="mb-1">Client Management</h3>
-      <p className="text-muted">Register, search, edit and delete clients.</p>
+      <PageHeader eyebrow="Client registry" title="Client Management">
+        <Button variant="primary" onClick={() => navigate('/admin/clients/new')}>
+          <Icon name="userPlus" size={16} className="me-2" />
+          Register New Client
+        </Button>
+      </PageHeader>
+
       {message && <Alert variant="success" dismissible onClose={() => setMessage('')}>{message}</Alert>}
 
-      <Row className="g-3">
-        <Col lg={8}>
-          <Card className="shadow-sm">
-            <Card.Body>
-              <InputGroup className="mb-3">
-                <Form.Control
-                  placeholder="Search by client number, name or surname"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {search && <Button variant="outline-secondary" onClick={() => setSearch('')}>Clear</Button>}
-              </InputGroup>
-              <div className="text-muted small mb-2">
-                Showing {visible.length} of {clients.length} clients
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <Table hover size="sm" className="align-middle">
-                  <thead>
-                    <tr>
-                      <th>Client #</th>
-                      <th>Name</th>
-                      <th>Gender</th>
-                      <th>Email</th>
-                      <th>Phone</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.length === 0 && (
-                      <tr><td colSpan="6" className="text-center text-muted py-4">No clients found</td></tr>
-                    )}
-                    {visible.map((c) => (
-                      <tr key={c.clientNumber}>
-                        <td className="fw-semibold">{c.clientNumber}</td>
-                        <td>{c.firstName} {c.surname}</td>
-                        <td>{c.gender}</td>
-                        <td>{c.email}</td>
-                        <td>{c.phone}</td>
-                        <td className="text-nowrap">
-                          <Button size="sm" variant="outline-primary" className="me-1" onClick={() => startEdit(c)}>Edit</Button>
-                          <Button size="sm" variant="outline-danger" onClick={() => setToDelete(c)}>Delete</Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-
-        <Col lg={4}>
-          <Card className="shadow-sm">
-            <Card.Body>
-              <h5>{editingNumber ? 'Edit ' + editingNumber : 'Register New Client'}</h5>
-              <div className="text-muted small mb-3">
-                Client number: {editingNumber ? editingNumber : nextClientNumber(clients) + ' (auto)'}
-              </div>
-              <Form onSubmit={handleSubmit} noValidate>
-                {field('firstName', 'First name')}
-                {field('surname', 'Surname')}
-                <Form.Group className="mb-2">
-                  <Form.Label className="small fw-semibold">Gender</Form.Label>
-                  <Form.Select name="gender" value={form.gender} onChange={handleChange} isInvalid={!!errors.gender}>
-                    <option value="">Select...</option>
-                    <option>Male</option>
-                    <option>Female</option>
-                    <option>Other</option>
-                  </Form.Select>
-                  <Form.Control.Feedback type="invalid">{errors.gender}</Form.Control.Feedback>
-                </Form.Group>
-                {field('dateOfBirth', 'Date of birth', 'date')}
-                {field('idNumber', 'ID / Passport number')}
-                {field('email', 'Email', 'email')}
-                {field('phone', 'Phone')}
-                {field('address', 'Address')}
-                <div className="d-grid gap-2 mt-3">
-                  <Button type="submit">{editingNumber ? 'Save changes' : 'Save client'}</Button>
-                  <Button variant="outline-secondary" onClick={resetForm}>Cancel / Reset</Button>
-                </div>
-              </Form>
-            </Card.Body>
-          </Card>
-        </Col>
+      <Row className="g-3 mb-3">
+        <Col xl={3} sm={6}><StatCard label="Registered clients" value={clients.length} hint="In the client registry" icon="users" /></Col>
+        <Col xl={3} sm={6}><StatCard label="With cases" value={withCases} hint="At least one case" icon="folder" /></Col>
+        <Col xl={3} sm={6}><StatCard label="Without cases" value={clients.length - withCases} hint="No case opened yet" icon="user" /></Col>
+        <Col xl={3} sm={6}><StatCard label="Female : Male" value={`${females} : ${males}`} hint={`${clients.length - females - males} other`} icon="userCheck" /></Col>
       </Row>
 
+      <div className="panel mb-3">
+        <div className="panel-body filter-bar">
+          <div className="search-box">
+            <Icon name="search" size={16} />
+            <Form.Control
+              placeholder="Search by client number, name or surname"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
+          <Form.Select value={genderFilter} onChange={(e) => { setGenderFilter(e.target.value); setPage(1); }} aria-label="Filter by gender">
+            <option value="All">All genders</option>
+            {GENDERS.map((g) => <option key={g}>{g}</option>)}
+          </Form.Select>
+          <Form.Select value={casesFilter} onChange={(e) => { setCasesFilter(e.target.value); setPage(1); }} aria-label="Filter by cases">
+            <option value="All">All clients</option>
+            <option>With cases</option>
+            <option>No cases</option>
+          </Form.Select>
+          {filtersActive && <Button variant="outline-secondary" onClick={clearFilters}>Clear</Button>}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">
+            Registered Client Entities
+            <span className="count-badge">{clients.length} total</span>
+          </h2>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Client #</th>
+                <th>Client</th>
+                <th>ID / Passport</th>
+                <th>Contact</th>
+                <th>Address</th>
+                <th>Cases</th>
+                <th className="sticky-end"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan="7" className="empty-row">No clients found</td></tr>
+              )}
+              {rows.map((c) => (
+                <tr key={c.clientNumber}>
+                  <td className="cell-id">{c.clientNumber}</td>
+                  <td>
+                    <div className="cell-person">
+                      <Avatar name={`${c.firstName} ${c.surname}`} />
+                      <div>
+                        <div className="cell-title">{c.firstName} {c.surname}</div>
+                        <div className="cell-sub">{c.gender}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{c.idNumber}</td>
+                  <td>
+                    <div>{c.email}</div>
+                    <div className="cell-sub">{c.phone}</div>
+                  </td>
+                  <td style={{ maxWidth: 220 }}>{c.address}</td>
+                  <td><span className="pill pill-count">{caseCount(c.clientNumber)}</span></td>
+                  <td className="sticky-end">
+                    <div className="row-actions">
+                      <button type="button" className="icon-btn" onClick={() => navigate(`/admin/clients/${c.clientNumber}/edit`)} aria-label={`Edit ${c.clientNumber}`}>
+                        <Icon name="edit" size={15} />
+                      </button>
+                      <button type="button" className="icon-btn danger" onClick={() => setToDelete(c)} aria-label={`Delete ${c.clientNumber}`}>
+                        <Icon name="trash" size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={currentPage} pageCount={pageCount} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+      </div>
+
       <Modal show={!!toDelete} onHide={() => setToDelete(null)} centered>
-        <Modal.Header closeButton><Modal.Title>Delete client?</Modal.Title></Modal.Header>
+        <Modal.Header closeButton>
+          <Modal.Title>{deleteBlocked ? 'Client cannot be deleted' : 'Delete client?'}</Modal.Title>
+        </Modal.Header>
         <Modal.Body>
-          Are you sure you want to delete {toDelete && toDelete.firstName + ' ' + toDelete.surname}
-          {toDelete && ' (' + toDelete.clientNumber + ')'}? This cannot be undone.
+          {toDelete && deleteBlocked ? (
+            <>
+              <strong>{toDelete.firstName} {toDelete.surname}</strong> ({toDelete.clientNumber}) still has{' '}
+              {caseCount(toDelete.clientNumber)} case(s). Delete or reassign those cases first.
+            </>
+          ) : (
+            toDelete && (
+              <>
+                Are you sure you want to delete <strong>{toDelete.firstName} {toDelete.surname}</strong> ({toDelete.clientNumber})?
+                This cannot be undone.
+              </>
+            )
+          )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setToDelete(null)}>Cancel</Button>
-          <Button variant="danger" onClick={confirmDelete}>Delete</Button>
+          <Button variant="outline-secondary" onClick={() => setToDelete(null)}>{deleteBlocked ? 'Close' : 'Cancel'}</Button>
+          {!deleteBlocked && <Button variant="danger" onClick={confirmDelete}>Delete</Button>}
         </Modal.Footer>
       </Modal>
     </>

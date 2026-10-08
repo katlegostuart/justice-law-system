@@ -1,9 +1,12 @@
-﻿import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import AttorneyDashboard from './pages/AttorneyDashboard';
 import ClientDashboard from './pages/ClientDashboard';
 import Clients from './pages/admin/Clients';
+import ClientForm from './pages/admin/ClientForm';
+import Cases from './pages/admin/Cases';
+import CaseForm from './pages/admin/CaseForm';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import ComingSoon from './components/ComingSoon';
@@ -16,8 +19,12 @@ export default function App() {
       <Route path="/admin" element={<ProtectedRoute allowedRole="Admin"><Layout /></ProtectedRoute>}>
         <Route index element={<AdminDashboard />} />
         <Route path="clients" element={<Clients />} />
+        <Route path="clients/new" element={<ClientForm />} />
+        <Route path="clients/:clientNumber/edit" element={<ClientForm />} />
         <Route path="attorneys" element={<ComingSoon title="Attorney Management" />} />
-        <Route path="cases" element={<ComingSoon title="Case Management" />} />
+        <Route path="cases" element={<Cases />} />
+        <Route path="cases/new" element={<CaseForm />} />
+        <Route path="cases/:caseNumber/edit" element={<CaseForm />} />
         <Route path="tasks" element={<ComingSoon title="Legal Tasks" />} />
       </Route>
 
