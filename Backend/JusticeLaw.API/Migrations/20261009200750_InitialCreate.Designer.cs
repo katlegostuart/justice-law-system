@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace JusticeLaw.API.Migrations
 {
     [DbContext(typeof(LawDBContext))]
-    [Migration("20261008190851_initial migration")]
-    partial class initialmigration
+    [Migration("20261009200750_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
