@@ -12,6 +12,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import ComingSoon from './components/ComingSoon';
 import { DataProvider } from './context/DataContext';
+import AttorneyForm from './pages/admin/AttorneyForm';
+
+
+
 
 export default function App() {
   return (
@@ -27,8 +31,12 @@ export default function App() {
           <Route path="cases" element={<Cases />} />
           <Route path="cases/new" element={<CaseForm />} />
           <Route path="attorneys" element={<Attorneys />} />
+<Route path="attorneys/new" element={<AttorneyForm />} />
+<Route path="attorneys/edit/:id" element={<AttorneyForm />} />
           <Route path="tasks" element={<ComingSoon title="Legal Tasks" />} />
         </Route>
+
+        
 
         <Route path="/attorney" element={<ProtectedRoute allowedRole="Attorney"><Layout /></ProtectedRoute>}>
           <Route index element={<AttorneyDashboard />} />

@@ -389,6 +389,15 @@ const CSS = `
 .jl-notice{background:#f1f6ff;border:1px solid #dbe6fb;border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12px;color:#475569}
 .jl-notice b{display:block;color:#0f172a;font-size:13px;margin-bottom:4px}
 
+/* Width fixes: stop content overflowing the layout */
+.jl{width:100%;min-width:0;max-width:100%}
+.jl-main,.jl-page{min-width:0;max-width:100%}
+.jl-grid{grid-template-columns:minmax(300px,390px) minmax(0,1fr)}
+.jl-two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.jl-cl{grid-template-columns:minmax(0,1fr) 230px}
+.jl-two>*,.jl-cl>*{min-width:0}
+.jl-kpis{min-width:0}
+
 /* Responsive */
 @media (max-width:1100px){.jl-grid,.jl-two,.jl-cl{grid-template-columns:1fr}}
 @media (max-width:900px){.jl{flex-direction:column}.jl-side{width:auto;flex:none;height:auto;position:static}.jl-jp{grid-template-columns:1fr}}
