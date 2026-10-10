@@ -489,7 +489,7 @@ function StatusPill({ label, className = '' }) {
 }
 
 /* ================= Page 1: Attorney dashboard ================= */
-export default function AttorneyDashboard({ withShell = true }) {
+export default function AttorneyDashboard({ withShell = false }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [selectedId, setSelectedId] = useState(CASES[0].id);
@@ -841,7 +841,7 @@ export default function AttorneyDashboard({ withShell = true }) {
 }
 
 /* ================= Page 2: Legal Tasks & Activities ================= */
-export function LegalTasksPage({ withShell = true }) {
+export function LegalTasksPage({ withShell = false }) {
   const [filter, setFilter] = useState('All Tasks');
 
   const active = TRACKER_FILTERS.find((f) => f.key === filter) || TRACKER_FILTERS[0];
