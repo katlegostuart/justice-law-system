@@ -48,7 +48,7 @@ export default function Login() {
       <header className="login-top">
         <div className="brand">
           <span className="brand-mark">
-            <Icon name="scale" size={22} />
+            <Icon name="scale" size={30} strokeWidth={1.8} />
           </span>
           <div className="brand-text">
             <strong>JusticeLaw Attorneys</strong>
@@ -63,19 +63,14 @@ export default function Login() {
       <main className="login-main">
         <div className="login-card">
           <section className="login-left">
-            <div className="brand">
-              <span className="brand-mark">
-                <Icon name="scale" size={22} />
-              </span>
-              <div className="brand-text">
-                <strong>JUSTICELAW ATTORNEYS</strong>
-                <small>LEGAL PRACTICE PORTAL</small>
-              </div>
+            <span className="login-emblem"><Icon name="scale" size={68} strokeWidth={1.5} /></span>
+            <div className="login-brandname">
+              <strong>JUSTICELAW ATTORNEYS</strong>
+              <small>LEGAL PRACTICE PORTAL</small>
             </div>
-            <div>
-              <h2>Integrity, Confidentiality &amp; Fiduciary Excellence</h2>
-              <p>Direct authenticated access to your legal matters, case dockets and confidential client records.</p>
-            </div>
+            <span className="login-divider" />
+            <h2>Integrity, Confidentiality &amp; Fiduciary Excellence</h2>
+            <p>Direct authenticated access to your legal matters, case dockets and confidential client records.</p>
           </section>
 
           <section className="login-right">
