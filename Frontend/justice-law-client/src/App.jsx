@@ -31,9 +31,9 @@ export default function App() {
         </Route>
 
         <Route path="/attorney" element={<ProtectedRoute allowedRole="Attorney"><Layout /></ProtectedRoute>}>
-          <Route index element={<AttorneyDashboard />} />
+          <Route index element={<AttorneyDashboard withShell={false} />} />
           <Route path="cases" element={<ComingSoon title="My Cases" />} />
-          <Route path="tasks" element={<LegalTasksPage />} />
+          <Route path="tasks" element={<LegalTasksPage withShell={false} />} />
         </Route>
 
         <Route path="/client" element={<ProtectedRoute allowedRole="Client"><Layout /></ProtectedRoute>}>
@@ -45,3 +45,4 @@ export default function App() {
     </DataProvider>
   );
 }
+
