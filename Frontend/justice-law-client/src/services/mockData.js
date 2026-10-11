@@ -39,10 +39,45 @@ export const mockCases = [
 ];
 
 // Molefi owns the Legal Tasks screens and can extend these.
-export const mockTasks = [
+/*export const mockTasks = [
   { taskId: 'TSK-8820', caseNumber: 'CAS-2024-0891', name: 'Draft Share Purchase Agreement', description: 'Includes indemnity clauses and shareholder restructuring annexures.', dueDate: '2024-10-24', status: 'Complete' },
   { taskId: 'TSK-8835', caseNumber: 'CAS-2024-0891', name: 'Prepare Affidavit for High Court Discovery', description: 'Financial declaration documentation and balance audit filing.', dueDate: '2024-11-04', status: 'In Progress' },
   { taskId: 'TSK-8840', caseNumber: 'CAS-2024-0891', name: 'Schedule Client Pre-Trial Consultation', description: 'Strategy review with lead counsel ahead of the formal motion.', dueDate: '2024-11-08', status: 'In Progress' },
   { taskId: 'TSK-8841', caseNumber: 'CAS-2024-0891', name: 'File Master Court Documentation', description: 'Registrar endorsement and official service to the counterpart attorneys.', dueDate: '2024-11-15', status: 'Not Started' },
   { taskId: 'TSK-8850', caseNumber: 'CAS-2024-0944', name: 'Lodge Statement of Claim', description: 'Prepare and lodge the arbitration statement of claim.', dueDate: '2024-05-10', status: 'In Progress' },
 ];
+const seedTasks = [
+  ['Prepare court documents', 'Draft and file the supporting papers.'],
+  ['Contact client', 'Update the client on progress.'],
+  ['Research case law', 'Find precedents relevant to the matter.'],
+];
+const seedStatuses = ['Not Started', 'In Progress', 'Complete'];
+const seedDate = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};*/
+
+const seedTasks = [
+  ['Prepare court documents', 'Draft and file the supporting papers.'],
+  ['Contact client', 'Update the client on progress.'],
+  ['Research case law', 'Find precedents relevant to the matter.'],
+];
+const seedStatuses = ['Not Started', 'In Progress', 'Complete'];
+const seedDate = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+export const mockTasks = mockCases.slice(0, 6).flatMap((c, i) =>
+  seedTasks.slice(0, i % 2 === 0 ? 3 : 2).map(([title, description], j) => ({
+    taskId: `TSK-${String(i * 3 + j + 1).padStart(4, '0')}`,
+    title,
+    description,
+    caseNumber: c.caseNumber,
+    attorneyNumber: c.attorneyNumber || null,
+    dueDate: seedDate((i + j) * 4 - 6),
+    status: seedStatuses[(i + j) % 3],
+  }))
+);
