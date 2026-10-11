@@ -13,6 +13,8 @@ import Layout from './components/Layout';
 import ComingSoon from './components/ComingSoon';
 import { DataProvider } from './context/DataContext';
 import AttorneyForm from './pages/admin/AttorneyForm';
+import Tasks from './pages/admin/Tasks';
+import TaskForm from './pages/admin/TaskForm';
 
 
 
@@ -33,7 +35,9 @@ export default function App() {
           <Route path="attorneys" element={<Attorneys />} />
 <Route path="attorneys/new" element={<AttorneyForm />} />
 <Route path="attorneys/edit/:id" element={<AttorneyForm />} />
-          <Route path="tasks" element={<ComingSoon title="Legal Tasks" />} />
+          <Route path="tasks" element={<Tasks />} />
+<Route path="tasks/new" element={<TaskForm />} />
+<Route path="tasks/:taskId/edit" element={<TaskForm />} />
         </Route>
 
         
