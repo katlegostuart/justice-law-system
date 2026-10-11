@@ -1,7 +1,7 @@
 ﻿import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
-import AttorneyDashboard, { LegalTasksPage } from './pages/AttorneyDashboard';
+import AttorneyDashboard, { LegalTasksPage, MyCasesPage } from './pages/AttorneyDashboard';
 import ClientDashboard from './pages/ClientDashboard';
 import Clients from './pages/admin/Clients';
 import ClientForm from './pages/admin/ClientForm';
@@ -44,7 +44,7 @@ export default function App() {
 
         <Route path="/attorney" element={<ProtectedRoute allowedRole="Attorney"><Layout /></ProtectedRoute>}>
           <Route index element={<AttorneyDashboard withShell={false} />} />
-          <Route path="cases" element={<ComingSoon title="My Cases" />} />
+          <Route path="cases" element={<MyCasesPage />} />
           <Route path="tasks" element={<LegalTasksPage withShell={false} />} />
         </Route>
 
