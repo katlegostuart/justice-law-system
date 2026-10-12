@@ -13,7 +13,7 @@ namespace JusticeLaw.API.Migrations
 {
     [DbContext(typeof(LawDBContext))]
     [Migration("20261008190851_initial migration")]
-    partial class initialmigration
+    partial class InitialMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
