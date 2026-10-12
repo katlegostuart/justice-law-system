@@ -12,8 +12,13 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace JusticeLaw.API.Migrations
 {
     [DbContext(typeof(LawDBContext))]
+<<<<<<< HEAD:Backend/JusticeLaw.API/Migrations/20261008190851_initial migration.Designer.cs
     [Migration("20261008190851_initial migration")]
     partial class InitialMigration
+=======
+    [Migration("20261009200750_InitialCreate")]
+    partial class InitialCreate
+>>>>>>> cfde18e2ee4060a660678a9d5dc6bb761f5c65b3:Backend/JusticeLaw.API/Migrations/20261009200750_InitialCreate.Designer.cs
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

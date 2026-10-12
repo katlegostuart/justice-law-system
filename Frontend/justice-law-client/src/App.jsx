@@ -1,7 +1,7 @@
 ﻿import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
-import AttorneyDashboard from './pages/AttorneyDashboard';
+import AttorneyDashboard, { LegalTasksPage, MyCasesPage } from './pages/AttorneyDashboard';
 import ClientDashboard from './pages/ClientDashboard';
 import Clients from './pages/admin/Clients';
 import ClientForm from './pages/admin/ClientForm';
@@ -12,6 +12,12 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import ComingSoon from './components/ComingSoon';
 import { DataProvider } from './context/DataContext';
+import AttorneyForm from './pages/admin/AttorneyForm';
+import Tasks from './pages/admin/Tasks';
+import TaskForm from './pages/admin/TaskForm';
+
+
+
 
 export default function App() {
   return (
@@ -27,13 +33,19 @@ export default function App() {
           <Route path="cases" element={<Cases />} />
           <Route path="cases/new" element={<CaseForm />} />
           <Route path="attorneys" element={<Attorneys />} />
-          <Route path="tasks" element={<ComingSoon title="Legal Tasks" />} />
+<Route path="attorneys/new" element={<AttorneyForm />} />
+<Route path="attorneys/edit/:id" element={<AttorneyForm />} />
+          <Route path="tasks" element={<Tasks />} />
+<Route path="tasks/new" element={<TaskForm />} />
+<Route path="tasks/:taskId/edit" element={<TaskForm />} />
         </Route>
 
+        
+
         <Route path="/attorney" element={<ProtectedRoute allowedRole="Attorney"><Layout /></ProtectedRoute>}>
-          <Route index element={<AttorneyDashboard />} />
-          <Route path="cases" element={<ComingSoon title="My Cases" />} />
-          <Route path="tasks" element={<ComingSoon title="Legal Tasks" />} />
+          <Route index element={<AttorneyDashboard withShell={false} />} />
+          <Route path="cases" element={<MyCasesPage />} />
+          <Route path="tasks" element={<LegalTasksPage withShell={false} />} />
         </Route>
 
         <Route path="/client" element={<ProtectedRoute allowedRole="Client"><Layout /></ProtectedRoute>}>
@@ -45,3 +57,4 @@ export default function App() {
     </DataProvider>
   );
 }
+

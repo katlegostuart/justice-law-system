@@ -32,7 +32,7 @@ const paths = {
   scale: <><path d="M12 3v18" /><path d="M6 21h12" /><path d="M4 7h16" /><path d="M4 7l-3 7a3 3 0 0 0 6 0z" /><path d="M20 7l-3 7a3 3 0 0 0 6 0z" /></>,
 };
 
-export default function Icon({ name, size = 18, className = '' }) {
+export default function Icon({ name, size = 18, className = '', strokeWidth = 2 }) {
   return (
     <svg
       width={size}
@@ -40,7 +40,7 @@ export default function Icon({ name, size = 18, className = '' }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

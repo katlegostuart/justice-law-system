@@ -131,17 +131,60 @@ const CASES = [
   {
     id: 4, ref: 'CAS-2023-0419', title: 'Khumalo Mineral Concession Deeds', type: 'Property Law',
     label: 'Review', group: 'In Progress', clientKey: 'transglobal', clientLabel: 'TransGlobal Capital PLC', clientIcon: 'building',
-    meta: { icon: 'file', text: 'Deeds Office' }, detail: { opened: '19 Nov 2023' },
+        meta: { icon: 'file', text: 'Deeds Office' },
+    detail: {
+      caseNo: '2023/08841', court: 'Deeds Registry (Gauteng)',
+      milestones: ['1. Mandate Accepted', '2. Deeds Drafted', '3. Lodged at Deeds Office', '4. Registration Complete'], step: 3, note: 'Awaiting registry examination',
+      seat: 'Deeds Registry, Pretoria', seat2: 'Gauteng Province', judge: 'Registrar of Deeds', judge2: 'Examination pending',
+      opened: '19 Nov 2023', compliance: 'Rates clearance pending',
+      summary: 'Registration of mineral concession deeds on behalf of the client. Deeds have been drafted and lodged, and the matter is awaiting examination by the Deeds Office before registration can be completed.',
+      tasks: [
+        { title: 'Follow Up With Deeds Office', desc: 'Check examination status', due: 'Due 18 Apr', tone: 'red', icon: 'clock' },
+        { title: 'Obtain Rates Clearance', desc: 'Municipal clearance certificate', due: 'Due 29 Apr', tone: 'grey', icon: 'circle' },
+        { title: 'Draft Deeds of Concession', desc: 'Prepared and lodged', due: '02 Apr', tone: 'done', icon: 'checkcircle' },
+      ],
+      filings: [
+        { name: 'Deeds_of_Concession_Lodged.pdf', meta: 'Lodged 04 Apr 2024 • 3.1 MB', icon: 'file', action: 'download' },
+        { name: 'Mandate_Letter_TransGlobal.pdf', meta: 'Signed • 19 Nov 2023', icon: 'lock', action: 'eye' },
+      ],
+    },
   },
   {
     id: 5, ref: 'CAS-2024-1120', title: 'Metropolitan Fleet Supply Dispute', type: 'Commercial Law',
     label: 'Open', group: 'Open', clientKey: 'vance', clientLabel: 'Vance Tech Holdings', clientIcon: 'building',
-    meta: { icon: 'file', text: 'Summons Drafted' }, detail: { opened: '20 Apr 2024' },
+        meta: { icon: 'file', text: 'Summons Drafted' },
+    detail: {
+      caseNo: '2024/17120', court: 'High Court Johannesburg (Gauteng Local Division)',
+      milestones: ['1. Letter of Demand', '2. Summons Drafted', '3. Summons Issued', '4. Pleadings'], step: 2, note: 'Summons ready to issue',
+      seat: 'High Court of South Africa', seat2: 'Gauteng Local Division (JHB)', judge: 'To be allocated', judge2: 'Not yet enrolled',
+      opened: '20 Apr 2024', compliance: 'Summons awaiting issue',
+      summary: 'Commercial dispute over the supply of a vehicle fleet. A letter of demand went unanswered and summons has been drafted, ready to be issued and served on the defendant.',
+      tasks: [
+        { title: 'Issue and Serve Summons', desc: 'Lodge with the Registrar', due: 'Due 25 Apr', tone: 'red', icon: 'clock' },
+        { title: 'Collect Supply Contracts', desc: 'Client to send signed copies', due: 'Due 30 Apr', tone: 'grey', icon: 'circle' },
+      ],
+      filings: [
+        { name: 'Letter_of_Demand.pdf', meta: 'Sent 08 Apr 2024 • 0.4 MB', icon: 'file', action: 'download' },
+        { name: 'Combined_Summons_Draft.pdf', meta: 'Draft • 20 Apr 2024', icon: 'file', action: 'download' },
+      ],
+    },
   },
   {
     id: 6, ref: 'CAS-2024-1203', title: 'Sterling Logistics Employment Contract Review', type: 'Labor Law',
     label: 'In Progress', group: 'In Progress', clientKey: 'sterling', clientLabel: 'Sterling Logistics Ltd', clientIcon: 'building',
-    meta: { icon: 'calendar', text: '30 May 2024' }, detail: { opened: '02 May 2024' },
+        meta: { icon: 'calendar', text: '30 May 2024' },
+    detail: {
+      caseNo: '2024/19203', court: 'Advisory matter (no court)',
+      milestones: ['1. Contracts Collected', '2. Legal Review', '3. Client Feedback', '4. Final Opinion'], step: 2, note: 'Opinion due 30 May',
+      seat: 'Advisory matter', seat2: 'Johannesburg Chambers', judge: 'Not applicable', judge2: 'Non-litigious',
+      opened: '02 May 2024', compliance: 'Labour Relations Act review',
+      summary: 'Review of the client\'s standard employment contracts for compliance with the Labour Relations Act and the Basic Conditions of Employment Act, with a written opinion and recommended amendments.',
+      tasks: [
+        { title: 'Complete Contract Review', desc: 'All 12 contract templates', due: 'Due 20 May', tone: 'grey', icon: 'circle' },
+        { title: 'Draft Written Opinion', desc: 'Recommended amendments', due: 'Due 28 May', tone: 'grey', icon: 'circle' },
+      ],
+      filings: [{ name: 'Employment_Contract_Templates.zip', meta: 'Received 02 May 2024 • 6.8 MB', icon: 'file', action: 'download' }],
+    },
   },
 ];
 
@@ -389,6 +432,15 @@ const CSS = `
 .jl-notice{background:#f1f6ff;border:1px solid #dbe6fb;border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12px;color:#475569}
 .jl-notice b{display:block;color:#0f172a;font-size:13px;margin-bottom:4px}
 
+/* Width fixes: stop content overflowing the layout */
+.jl{width:100%;min-width:0;max-width:100%}
+.jl-main,.jl-page{min-width:0;max-width:100%}
+.jl-grid{grid-template-columns:minmax(300px,390px) minmax(0,1fr)}
+.jl-two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.jl-cl{grid-template-columns:minmax(0,1fr) 230px}
+.jl-two>*,.jl-cl>*{min-width:0}
+.jl-kpis{min-width:0}
+
 /* Responsive */
 @media (max-width:1100px){.jl-grid,.jl-two,.jl-cl{grid-template-columns:1fr}}
 @media (max-width:900px){.jl{flex-direction:column}.jl-side{width:auto;flex:none;height:auto;position:static}.jl-jp{grid-template-columns:1fr}}
@@ -489,7 +541,7 @@ function StatusPill({ label, className = '' }) {
 }
 
 /* ================= Page 1: Attorney dashboard ================= */
-export default function AttorneyDashboard({ withShell = true }) {
+export default function AttorneyDashboard({ withShell = false, casesOnly = false }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [selectedId, setSelectedId] = useState(CASES[0].id);
@@ -524,7 +576,18 @@ export default function AttorneyDashboard({ withShell = true }) {
 
   return (
     <Shell withShell={withShell}>
-      {/* Profile header */}
+          {casesOnly && (
+        <div className="jl-ph">
+          <div>
+            <div className="jl-lbl jl-orange">LEGAL OPERATIONS • CASES &amp; DOCKETS</div>
+            <h1>My Cases</h1>
+          </div>
+          <span className="jl-total">{CASES.length} Total</span>
+        </div>
+      )}
+
+      {/* Profile header (dashboard only) */}
+      {!casesOnly && (
       <section className="jl-prof">
         <div className="jl-prof-l">
           <div className="jl-ava">{ATTORNEY.initials}</div>
@@ -591,7 +654,7 @@ export default function AttorneyDashboard({ withShell = true }) {
           </div>
         </div>
       </section>
-
+      )}
       <div className="jl-grid">
         {/* Left: my assigned cases */}
         <div>
@@ -841,7 +904,7 @@ export default function AttorneyDashboard({ withShell = true }) {
 }
 
 /* ================= Page 2: Legal Tasks & Activities ================= */
-export function LegalTasksPage({ withShell = true }) {
+export function LegalTasksPage({ withShell = false }) {
   const [filter, setFilter] = useState('All Tasks');
 
   const active = TRACKER_FILTERS.find((f) => f.key === filter) || TRACKER_FILTERS[0];
@@ -942,4 +1005,8 @@ export function LegalTasksPage({ withShell = true }) {
       </section>
     </Shell>
   );
+}
+/* ================= Page 3: My Cases (same case workspace, no profile header) ================= */
+export function MyCasesPage(props) {
+  return <AttorneyDashboard {...props} casesOnly />;
 }
