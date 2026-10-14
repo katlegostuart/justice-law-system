@@ -55,9 +55,6 @@ export default function Login() {
             <small>LEGAL PRACTICE MANAGEMENT PORTAL</small>
           </div>
         </div>
-        <span className="secure-tag">
-          <Icon name="lock" size={14} /> Secure sign-in
-        </span>
       </header>
 
       <main className="login-main">
