@@ -112,7 +112,6 @@ export default function Attorneys() {
 
       <div className="am-top">
         <div>
-          <div className="am-crumb">FIRM ADMIN &gt; <b>PERSONNEL &amp; ROSTER</b></div>
           <h1>Legal Counsel &amp; Attorney Directory</h1>
           <p className="am-sub">Manage practicing attorneys, legal specializations, contact records, and caseload quotas with precision.</p>
         </div>
