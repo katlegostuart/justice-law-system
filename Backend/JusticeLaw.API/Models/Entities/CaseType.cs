@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace JusticeLaw.API.Models.Entities
 {
@@ -11,6 +12,7 @@ namespace JusticeLaw.API.Models.Entities
         public required string Name { get; set; }
 
         // One Case Type -> Many Cases
+        [JsonIgnore]
         public ICollection<Case> Cases { get; set; } = new List<Case>();
     }
 }
