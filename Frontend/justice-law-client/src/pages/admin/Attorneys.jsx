@@ -1,3 +1,4 @@
+import Icon from '../../components/Icon';
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Form, Button, Table, Modal } from 'react-bootstrap';
@@ -196,8 +197,10 @@ export default function Attorneys() {
                 <td><span className="am-spec">{a.specialization}</span></td>
                 <td>{a.email}<small>{a.phone}</small></td>
                 <td className="text-end text-nowrap">
-                  <Button as={Link} to={`/admin/attorneys/edit/${a.id}`} variant="link" size="sm">Edit</Button>
-                  <Button variant="link" size="sm" className="text-danger" onClick={() => setToDelete(a)}>Delete</Button>
+                  <div className="row-actions">
+                    <Link to={`/admin/attorneys/edit/${a.id}`} className="icon-btn" aria-label="Edit attorney" title="Edit attorney"><Icon name="edit" size={15} /></Link>
+                    <button type="button" className="icon-btn danger" onClick={() => setToDelete(a)} aria-label="Delete attorney" title="Delete attorney"><Icon name="trash" size={15} /></button>
+                  </div>
                 </td>
               </tr>
             ))}
