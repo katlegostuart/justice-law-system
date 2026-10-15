@@ -4,6 +4,7 @@ using JusticeLaw.API.Models.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace JusticeLaw.API.Controllers
 {
