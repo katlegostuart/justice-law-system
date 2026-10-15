@@ -142,7 +142,3 @@ export default function AdminDashboard() {
     </>
   );
 }
-/* ================= Page 3: My Cases (same case workspace, no profile header) ================= */
-export function MyCasesPage(props) {
-  return <AttorneyDashboard {...props} casesOnly />;
-}
