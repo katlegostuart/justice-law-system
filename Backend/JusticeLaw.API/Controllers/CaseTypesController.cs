@@ -3,9 +3,11 @@ using JusticeLaw.API.Models;
 using JusticeLaw.API.Models.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace JusticeLaw.API.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class CaseTypesController : ControllerBase
@@ -23,6 +25,7 @@ namespace JusticeLaw.API.Controllers
             return Ok(dbContext.CaseTypes.ToList());
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         public IActionResult AddCaseType(AddCaseTypeDto addCaseTypeDto)
         {
@@ -41,6 +44,7 @@ namespace JusticeLaw.API.Controllers
             return Ok(caseType);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpPut]
         [Route("{id:guid}")]
         public IActionResult UpdateCaseType(Guid id, UpdateCaseTypeDto updateCaseTypeDto)
@@ -53,6 +57,7 @@ namespace JusticeLaw.API.Controllers
             return Ok(caseType);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpDelete]
         [Route("{id:guid}")]
         public IActionResult DeleteCaseType(Guid id)

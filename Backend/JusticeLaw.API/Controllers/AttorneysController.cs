@@ -3,9 +3,11 @@ using JusticeLaw.API.Models;
 using JusticeLaw.API.Models.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace JusticeLaw.API.Controllers
 {
+    [Authorize(Roles = "Admin")]
     [Route("api/[controller]")]
     [ApiController]
     public class AttorneysController : ControllerBase

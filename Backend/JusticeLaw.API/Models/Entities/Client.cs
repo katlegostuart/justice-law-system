@@ -35,6 +35,8 @@ namespace JusticeLaw.API.Models.Entities
         [StringLength(20)]
         public required string IdPassportNumber { get; set; }
 
+        public string? UserId { get; set; }
+
         // One Client -> Many Cases
         [JsonIgnore]
         public ICollection<Case> Cases { get; set; } = new List<Case>();

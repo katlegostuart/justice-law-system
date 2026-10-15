@@ -3,9 +3,11 @@ using JusticeLaw.API.Models;
 using JusticeLaw.API.Models.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace JusticeLaw.API.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class LegalTasksController : ControllerBase
@@ -23,6 +25,7 @@ namespace JusticeLaw.API.Controllers
             return Ok(dbContext.LegalTasks.ToList());
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         public IActionResult AddTask(AddTaskDto addTaskDto)
         {
@@ -50,6 +53,7 @@ namespace JusticeLaw.API.Controllers
             return Ok(task);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpPut]
         [Route("{id:guid}")]
         public IActionResult UpdateTask(Guid id, UpdateTaskDto updateTaskDto)
@@ -66,6 +70,7 @@ namespace JusticeLaw.API.Controllers
             return Ok(task);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpDelete]
         [Route("{id:guid}")]
         public IActionResult DeleteTask(Guid id)

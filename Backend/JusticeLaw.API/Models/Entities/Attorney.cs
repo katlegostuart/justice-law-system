@@ -30,6 +30,8 @@ namespace JusticeLaw.API.Models.Entities
         [StringLength(50)]
         public required string Specialization { get; set; }
 
+        public string? UserId { get; set; }
+
         // One Attorney -> Many Cases
         [JsonIgnore]
         public ICollection<Case> Cases { get; set; } = new List<Case>();

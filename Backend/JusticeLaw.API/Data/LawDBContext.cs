@@ -1,9 +1,11 @@
 ﻿using JusticeLaw.API.Models.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 namespace JusticeLaw.API.Data
 {
-    public class LawDBContext : DbContext
+    public class LawDBContext : IdentityDbContext<IdentityUser>
     {
         public LawDBContext(DbContextOptions<LawDBContext> options) : base(options)
         {
@@ -19,6 +21,8 @@ namespace JusticeLaw.API.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
             // These numbers must be unique
             modelBuilder.Entity<Client>().HasIndex(c => c.ClientNumber).IsUnique();
             modelBuilder.Entity<Attorney>().HasIndex(a => a.StaffNumber).IsUnique();
