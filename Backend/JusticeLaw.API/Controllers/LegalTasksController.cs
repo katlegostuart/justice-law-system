@@ -20,10 +20,45 @@ namespace JusticeLaw.API.Controllers
             this.dbContext = dbContext;
         }
 
+        // Tasks the current user is allowed to see, based on the case they belong to:
+        //   Admin    -> all tasks
+        //   Client   -> tasks on their own cases
+        //   Attorney -> tasks on cases assigned to them
+        //   anyone else -> nothing
+        private IQueryable<LegalTask> VisibleTasks()
+        {
+            var tasks = dbContext.LegalTasks.AsQueryable();
+
+            if (User.IsInRole("Admin"))
+                return tasks;
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return tasks.Where(t => false);
+
+            if (User.IsInRole("Client"))
+            {
+                var myCaseIds = dbContext.Cases
+                    .Where(c => c.Client != null && c.Client.UserId == userId)
+                    .Select(c => c.Id);
+                return tasks.Where(t => myCaseIds.Contains(t.CaseId));
+            }
+
+            if (User.IsInRole("Attorney"))
+            {
+                var myCaseIds = dbContext.Cases
+                    .Where(c => c.Attorney != null && c.Attorney.UserId == userId)
+                    .Select(c => c.Id);
+                return tasks.Where(t => myCaseIds.Contains(t.CaseId));
+            }
+
+            return tasks.Where(t => false);
+        }
+
         [HttpGet]
         public IActionResult GetAllTasks()
         {
-            return Ok(dbContext.LegalTasks.ToList());
+            return Ok(VisibleTasks().ToList());
         }
 
         [Authorize(Roles = "Admin")]
@@ -45,11 +80,13 @@ namespace JusticeLaw.API.Controllers
             return Ok(taskEntity);
         }
 
+        // GET: api/LegalTasks/{id}
+        // Someone else's task returns 404, so its existence isn't revealed.
         [HttpGet]
         [Route("{id:guid}")]
         public IActionResult GetTask(Guid id)
         {
-            var task = dbContext.LegalTasks.Find(id);
+            var task = VisibleTasks().FirstOrDefault(t => t.Id == id);
             if (task == null) return NotFound();
             return Ok(task);
         }
@@ -85,12 +122,13 @@ namespace JusticeLaw.API.Controllers
         }
 
         // GET: api/LegalTasks/case/{caseId}
-        // Crucial for Attorney & Client dashboards to get tasks for a specific case
+        // For Attorney & Client dashboards: tasks for one case.
+        // If the case isn't theirs, the list comes back empty.
         [HttpGet]
         [Route("case/{caseId:guid}")]
         public IActionResult GetTasksByCase(Guid caseId)
         {
-            var tasks = dbContext.LegalTasks
+            var tasks = VisibleTasks()
                 .Where(t => t.CaseId == caseId)
                 .ToList();
 

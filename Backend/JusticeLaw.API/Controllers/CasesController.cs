@@ -21,11 +21,36 @@ namespace JusticeLaw.API.Controllers
             this.dbContext = dbContext;
         }
 
+        // Cases the current user is allowed to see:
+        //   Admin    -> all cases
+        //   Client   -> only cases where they are the client
+        //   Attorney -> only cases assigned to them
+        //   anyone else -> nothing
+        private IQueryable<Case> VisibleCases()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var cases = dbContext.Cases.AsQueryable();
+
+            if (User.IsInRole("Admin"))
+                return cases;
+
+            if (string.IsNullOrEmpty(userId))
+                return cases.Where(c => false);
+
+            if (User.IsInRole("Client"))
+                return cases.Where(c => c.Client != null && c.Client.UserId == userId);
+
+            if (User.IsInRole("Attorney"))
+                return cases.Where(c => c.Attorney != null && c.Attorney.UserId == userId);
+
+            return cases.Where(c => false);
+        }
+
         // GET: api/Cases?status=Open
         [HttpGet]
         public IActionResult GetAllCases(string? status)
         {
-            var query = dbContext.Cases
+            var query = VisibleCases()
                 .Include(c => c.Client)
                 .Include(c => c.Attorney)
                 .Include(c => c.CaseType)
@@ -61,11 +86,13 @@ namespace JusticeLaw.API.Controllers
             return Ok(caseEntity);
         }
 
+        // GET: api/Cases/{id}
+        // Someone else's case returns 404, so its existence isn't revealed.
         [HttpGet]
         [Route("{id:guid}")]
         public IActionResult GetCase(Guid id)
         {
-            var legalCase = dbContext.Cases
+            var legalCase = VisibleCases()
                 .Include(c => c.Client)
                 .Include(c => c.Attorney)
                 .Include(c => c.CaseType)
@@ -117,21 +144,20 @@ namespace JusticeLaw.API.Controllers
         [Route("search")]
         public IActionResult SearchCases(string query)
         {
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                return Ok(dbContext.Cases.ToList());
-            }
-
-            var cases = dbContext.Cases
+            var cases = VisibleCases()
                 .Include(c => c.Client)
                 .Include(c => c.Attorney)
                 .Include(c => c.CaseType)
-                .Where(c => c.CaseNumber.Contains(query) ||
-                            c.CaseName.Contains(query) ||
-                            (c.CaseType != null && c.CaseType.Name.Contains(query)))
-                .ToList();
+                .AsQueryable();
 
-            return Ok(cases);
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                cases = cases.Where(c => c.CaseNumber.Contains(query) ||
+                                         c.CaseName.Contains(query) ||
+                                         (c.CaseType != null && c.CaseType.Name.Contains(query)));
+            }
+
+            return Ok(cases.ToList());
         }
     }
 }
