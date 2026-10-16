@@ -10,6 +10,12 @@ const USE_MOCK = false;
 
 // Automatically attach the JWT token to every request if the user is logged in
 api.interceptors.request.use((config) => {
+  // 1. Don't attach a token to the login request
+  if (config.url.includes('/auth/login')) {
+    return config;
+  }
+
+  // 2. For all other requests, attach the token
   const user = JSON.parse(localStorage.getItem('user'));
   if (user && user.token) {
     config.headers.Authorization = `Bearer ${user.token}`;
