@@ -1,11 +1,31 @@
 // src/context/DataContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
 const MAX_CASELOAD = 8;
 
+// Returns the response data, or null when the call failed (for example a 403 for this role).
+const dataOf = (result) => (result.status === 'fulfilled' ? result.value.data : null);
+
+// Day part of a date string, safe if the value is missing.
+const day = (value) => (value ? String(value).split('T')[0] : '');
+
+// Remove duplicates by id (used when clients/attorneys are read from the cases).
+const uniqueById = (list) => {
+  const seen = new Set();
+  return list.filter((item) => {
+    if (!item || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+};
+
 export function DataProvider({ children }) {
+  const auth = useAuth();
+  const userKey = auth?.user?.email;
+
   const [clients, setClients] = useState([]);
   const [attorneys, setAttorneys] = useState([]);
   const [cases, setCases] = useState([]);
@@ -14,22 +34,31 @@ export function DataProvider({ children }) {
 
   const fetchData = async () => {
     try {
-      const [clientsRes, attorneysRes, casesRes, tasksRes, caseTypesRes] = await Promise.all([
+      // allSettled: one failed call (for example a 403) no longer wipes out all the data.
+      const [clientsRes, attorneysRes, casesRes, tasksRes, caseTypesRes] = await Promise.allSettled([
         api.get('/Clients'),
         api.get('/Attorneys'),
         api.get('/Cases'),
         api.get('/LegalTasks'),
-        api.get('/CaseTypes') // <-- NEW
+        api.get('/CaseTypes')
       ]);
 
+      const rawCases = dataOf(casesRes) || [];
+
+      // Admin can read /Clients and /Attorneys. Clients and attorneys cannot,
+      // so for them we use the client / attorney that comes inside their own cases.
+      const rawClients = dataOf(clientsRes) || uniqueById(rawCases.map((c) => c.client));
+      const rawAttorneys = dataOf(attorneysRes) || uniqueById(rawCases.map((c) => c.attorney));
+      const rawTasks = dataOf(tasksRes) || [];
+
       // MAP CLIENTS
-      setClients(clientsRes.data.map(c => ({
-        id: c.id, // GUID
+      setClients(rawClients.map((c) => ({
+        id: c.id,
         clientNumber: c.clientNumber,
         firstName: c.name, // API 'name' -> UI 'firstName'
         surname: c.surname,
         gender: c.gender,
-        dateOfBirth: c.dateOfBirth.split('T')[0],
+        dateOfBirth: day(c.dateOfBirth),
         email: c.email,
         phone: c.phoneNumber,
         address: c.homeAddress,
@@ -37,7 +66,7 @@ export function DataProvider({ children }) {
       })));
 
       // MAP ATTORNEYS
-      setAttorneys(attorneysRes.data.map(a => ({
+      setAttorneys(rawAttorneys.map((a) => ({
         id: a.id,
         staffNumber: a.staffNumber,
         name: a.name,
@@ -52,42 +81,57 @@ export function DataProvider({ children }) {
       })));
 
       // MAP CASES
-      setCases(casesRes.data.map(c => ({
+      const mappedCases = rawCases.map((c) => ({
         id: c.id,
         caseNumber: c.caseNumber,
         title: c.caseName, // API 'caseName' -> UI 'title'
         type: c.caseType?.name || 'Unknown',
         status: c.caseStatus, // API 'caseStatus' -> UI 'status'
         description: c.caseDescription,
-        dateOpened: c.dateOpened.split('T')[0],
+        dateOpened: day(c.dateOpened),
         clientId: c.clientId,
         attorneyId: c.attorneyId,
         clientNumber: c.client?.clientNumber,
         attorneyNumber: c.attorney?.staffNumber,
         caseTypeId: c.caseTypeId
-      })));
+      }));
+      setCases(mappedCases);
 
-      // MAP TASKS
-      setTasks(tasksRes.data.map(t => ({
+      // MAP TASKS (name and caseNumber are what the dashboards read)
+      const caseNumberById = {};
+      mappedCases.forEach((c) => { caseNumberById[c.id] = c.caseNumber; });
+
+      setTasks(rawTasks.map((t) => ({
         id: t.id,
-        taskId: `TSK-${t.id.slice(0, 4).toUpperCase()}`, // Generate display ID
+        taskId: `TSK-${String(t.id).slice(0, 4).toUpperCase()}`, // Generate display ID
         title: t.taskName,
+        name: t.taskName,
         description: t.description,
-        dueDate: t.dueDate.split('T')[0],
+        dueDate: day(t.dueDate),
         status: t.status,
-        caseId: t.caseId
+        caseId: t.caseId,
+        caseNumber: caseNumberById[t.caseId]
       })));
 
       // MAP CASE TYPES
-      setCaseTypes(caseTypesRes.data);
-
+      setCaseTypes(dataOf(caseTypesRes) || []);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error('Error fetching data:', error);
     }
   };
 
-  // eslint-disable-next-line
-  useEffect(() => { fetchData(); }, []);
+  // Load the data again whenever a different user logs in or out.
+  useEffect(() => {
+    if (auth && !auth.user) {
+      setClients([]);
+      setAttorneys([]);
+      setCases([]);
+      setTasks([]);
+      return;
+    }
+    fetchData();
+    // eslint-disable-next-line
+  }, [userKey]);
 
   const value = {
     clients, setClients,
