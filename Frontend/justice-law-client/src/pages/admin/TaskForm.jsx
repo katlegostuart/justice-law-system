@@ -4,6 +4,7 @@ import { Row, Col, Button, Form, Alert } from 'react-bootstrap';
 import Icon from '../../components/Icon';
 import { useData } from '../../context/DataContext';
 import { TASK_STATUSES, todayIso, nextTaskId } from '../../services/taskConfig';
+import api from '../../services/api';
 
 const emptyForm = () => ({
   title: '', description: '', caseNumber: '', attorneyNumber: '', dueDate: todayIso(), status: 'Not Started',
@@ -26,11 +27,11 @@ function validate(form, editing) {
 // /admin/tasks/new              -> add a task
 // /admin/tasks/TSK-0001/edit    -> edit an existing task
 export default function TaskForm() {
-  const { taskId: editingId } = useParams();
+  const { id: editingId } = useParams();
   const navigate = useNavigate();
-  const { attorneys, cases, tasks, setTasks } = useData();
+  const { attorneys, cases, tasks } = useData();
 
-  const existing = editingId ? tasks.find((t) => t.taskId === editingId) : null;
+  const existing = editingId ? tasks.find((t) => t.id === editingId) : null;
   const editing = !!editingId;
 
   const [form, setForm] = useState(() => {
@@ -66,26 +67,32 @@ export default function TaskForm() {
     setForm((f) => ({ ...f, caseNumber, attorneyNumber: f.attorneyNumber || (c && c.attorneyNumber) || '' }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const found = validate(form, editing);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
-    const data = {
-      ...form,
-      title: form.title.trim(),
+    const selectedCase = cases.find(c => c.caseNumber === form.caseNumber);
+
+    const payload = {
+      taskName: form.title.trim(),
       description: form.description.trim(),
-      attorneyNumber: form.attorneyNumber || null,
+      dueDate: new Date(form.dueDate).toISOString(),
+      status: form.status,
+      caseId: selectedCase?.id
     };
 
-    if (editing) {
-      setTasks(tasks.map((t) => (t.taskId === editingId ? { ...t, ...data } : t)));
-      goBack({ message: `Task ${editingId} updated.`, focus: editingId });
-    } else {
-      const taskId = nextTaskId(tasks);
-      setTasks([...tasks, { taskId, ...data }]);
-      goBack({ message: `Task ${taskId} created.`, focus: taskId });
+    try {
+      if (editing) {
+        await api.put(`/LegalTasks/${existing.id}`, payload);
+        goBack({ message: `Task updated.` });
+      } else {
+        await api.post('/LegalTasks', payload);
+        goBack({ message: `Task created.` });
+      }
+    } catch (err) {
+      alert("Error saving task: " + err.message);
     }
   };
 

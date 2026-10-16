@@ -4,12 +4,13 @@ import { Row, Col, Modal, Button, Alert, Form } from 'react-bootstrap';
 import Icon from '../../components/Icon';
 import { Avatar, PageHeader, StatCard, Pager } from '../../components/ui';
 import { useData } from '../../context/DataContext';
+import api from '../../services/api';
 
 const PAGE_SIZE = 6;
 const GENDERS = ['Male', 'Female', 'Other'];
 
 export default function Clients() {
-  const { clients, setClients, cases } = useData();
+  const { clients, cases, refreshData } = useData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -61,10 +62,15 @@ export default function Clients() {
     setPage(1);
   };
 
-  const confirmDelete = () => {
-    setClients(clients.filter((c) => c.clientNumber !== toDelete.clientNumber));
-    setMessage(`Client ${toDelete.clientNumber} deleted.`);
-    setToDelete(null);
+  const confirmDelete = async () => {
+    try {
+      await api.delete(`/Clients/${toDelete.id}`);
+      setMessage(`Client ${toDelete.clientNumber} deleted.`);
+      setToDelete(null);
+      refreshData();
+    } catch (err) {
+      alert("Error deleting client: " + err.message);
+    }
   };
 
   const deleteBlocked = toDelete && caseCount(toDelete.clientNumber) > 0;
@@ -155,7 +161,7 @@ export default function Clients() {
                   <td><span className="pill pill-count">{caseCount(c.clientNumber)}</span></td>
                   <td className="sticky-end">
                     <div className="row-actions">
-                      <button type="button" className="icon-btn" onClick={() => navigate(`/admin/clients/${c.clientNumber}/edit`)} aria-label={`Edit ${c.clientNumber}`}>
+                      <button type="button" className="icon-btn" onClick={() => navigate(`/admin/clients/edit/${c.id}`)} aria-label={`Edit ${c.clientNumber}`}>
                         <Icon name="edit" size={15} />
                       </button>
                       <button type="button" className="icon-btn danger" onClick={() => setToDelete(c)} aria-label={`Delete ${c.clientNumber}`}>

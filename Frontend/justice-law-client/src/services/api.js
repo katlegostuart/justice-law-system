@@ -6,7 +6,7 @@ const api = axios.create({
 });
 
 // Change this to false to use the real API
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 // Automatically attach the JWT token to every request if the user is logged in
 api.interceptors.request.use((config) => {
@@ -27,13 +27,21 @@ export async function loginRequest(email, password) {
     ];
     const found = mockUsers.find((u) => u.email === email && u.password === password);
     if (!found) throw new Error('Invalid email or password');
-    const { password: _unused, ...safeUser } = found;
-    return { token: 'mock-token', ...safeUser };
+    delete found.password;
+    return { token: 'mock-token', ...found };
   }
   
-  // Real API call
-  const res = await api.post('/auth/login', { email, password });
-  return res.data; // Expected: { token, name, role, clientNumber?, staffNumber? }
+    // 1. Real API call to get token
+    const loginRes = await api.post('/auth/login', { email, password });
+    const { token, role, email: userEmail } = loginRes.data;
+
+    // 2. Immediately fetch the user profile to get name, staffNumber, clientNumber
+    const meRes = await api.get('/Me', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    // 3. Merge and return the full user object
+    return { token, role, email: userEmail, ...meRes.data };
 }
 
 export default api;

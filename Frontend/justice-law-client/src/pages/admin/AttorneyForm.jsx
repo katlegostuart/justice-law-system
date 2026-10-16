@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Form, Button } from 'react-bootstrap';
-import { useAttorneys, addAttorney, updateAttorney, staffLabel, SPECIALIZATIONS, TIERS } from './attorneyStore';
+import { useData } from '../../context/DataContext';
+import api from '../../services/api';
+
+const SPECIALIZATIONS = ['Commercial Law', 'Criminal Law', 'Family Law', 'Labor Law', 'Property Law', 'Civil Law'];
+const TIERS = ['Senior Partner', 'Junior Partner', 'Senior Counsel', 'Associate Advocate', 'Junior Advocate'];
 
 const NAME_RE = /^[A-Za-z' -]{2,}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,13 +44,15 @@ const emptyForm = (staffNo) => ({
 export default function AttorneyForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { rows, nextNo } = useAttorneys();
+  const { attorneys } = useData(); // swapped to useData
 
-  const existing = id ? rows.find((r) => String(r.id) === id) : null;
+  const existing = id ? attorneys.find((r) => String(r.id) === id) : null;
   const editing = !!id;
 
   const [form, setForm] = useState(() =>
-    existing ? { ...existing, capacity: String(existing.capacity) } : emptyForm(staffLabel(nextNo))
+    existing 
+      ? { ...existing, capacity: String(existing.capacity) } 
+      : emptyForm(`STF-${Math.floor(1000 + Math.random() * 9000)}`)
   );
   const [errors, setErrors] = useState({});
 
@@ -74,36 +80,41 @@ export default function AttorneyForm() {
     if (!form.gender) e.gender = 'Select a gender.';
     if (!form.specialization) e.specialization = 'Select a specialization.';
     if (!EMAIL_RE.test(email)) e.email = 'Enter an email like name@justicelaw.co.za.';
-    else if (rows.some((r) => r.id !== form.id && r.email.toLowerCase() === email)) e.email = 'This email is already registered.';
+    else if (attorneys.some((r) => r.id !== form.id && r.email.toLowerCase() === email)) e.email = 'This email is already registered.';
     if (!PHONE_RE.test(form.phone.trim())) e.phone = 'Enter a valid phone number, e.g. +27 11 555 0192.';
     const cap = Number(form.capacity);
     if (!Number.isInteger(cap) || cap < 1 || cap > 20) e.capacity = 'Enter a whole number from 1 to 20.';
     return e;
   };
 
-  const save = (ev) => {
-    ev.preventDefault();
-    const e = validate();
-    setErrors(e);
-    if (Object.keys(e).length) return;
+  const save = async (ev) => {
+  ev.preventDefault();
+  const e = validate();
+  setErrors(e);
+  if (Object.keys(e).length) return;
 
-    const clean = {
-      ...form,
-      name: form.name.trim(),
-      surname: form.surname.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      capacity: Number(form.capacity),
-    };
-
-    if (editing) {
-      updateAttorney(existing.id, clean);
-      navigate(LIST_PATH, { state: { notice: `${clean.name} ${clean.surname} was updated.` } });
-    } else {
-      addAttorney(clean);
-      navigate(LIST_PATH, { state: { notice: `${clean.name} ${clean.surname} was added to the roster.` } });
-    }
+  const payload = {
+    staffNumber: form.staffNo,
+    name: form.name.trim(),
+    surname: form.surname.trim(),
+    gender: form.gender,
+    email: form.email.trim(),
+    phoneNumber: form.phone.trim(),
+    specialization: form.specialization
   };
+
+  try {
+    if (editing) {
+      await api.put(`/Attorneys/${existing.id}`, payload);
+      navigate(LIST_PATH, { state: { notice: `${payload.name} was updated.` } });
+    } else {
+      await api.post('/Attorneys', payload);
+      navigate(LIST_PATH, { state: { notice: `${payload.name} was added to the roster.` } });
+    }
+  } catch (err) {
+    alert("Error saving attorney: " + err.message);
+  }
+};
 
   return (
     <div className="am">

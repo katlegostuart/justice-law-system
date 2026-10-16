@@ -4,6 +4,7 @@ import { Row, Col, Button, Form, Alert } from 'react-bootstrap';
 import Icon from '../../components/Icon';
 import { useData } from '../../context/DataContext';
 import { CASE_TYPES, CASE_STATUSES } from '../../services/mockData';
+import api from '../../services/api';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyForm = () => ({
@@ -25,11 +26,11 @@ function validate(form) {
 // /admin/cases/new            -> open a new case
 // /admin/cases/CAS-2024-0891/edit -> edit an existing case
 export default function CaseForm() {
-  const { caseNumber: editingNumber } = useParams();
+  const { id: editingNumber } = useParams();
   const navigate = useNavigate();
-  const { clients, attorneys, cases, setCases, caseload, maxCaseload, nextCaseNumber } = useData();
+  const { clients, attorneys, cases, caseload, maxCaseload, nextCaseNumber, caseTypes } = useData();
 
-  const existing = editingNumber ? cases.find((c) => c.caseNumber === editingNumber) : null;
+  const existing = editingNumber ? cases.find((c) => c.id === editingNumber) : null;
 
   const [form, setForm] = useState(() => {
     if (!existing) return emptyForm();
@@ -53,20 +54,40 @@ export default function CaseForm() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
-    const data = { ...form, attorneyNumber: form.attorneyNumber || null };
-    if (editingNumber) {
-      setCases(cases.map((c) => (c.caseNumber === editingNumber ? { ...c, ...data } : c)));
-      goBack({ message: `Case ${editingNumber} updated.`, focus: editingNumber });
-    } else {
-      const caseNumber = nextCaseNumber(form.dateOpened);
-      setCases([...cases, { caseNumber, ...data }]);
-      goBack({ message: `Case ${caseNumber} registered.`, focus: caseNumber });
+    // FIX 1: Look up by ID (GUID) since the dropdowns now use GUIDs as values
+    const selectedClient = clients.find(c => c.id === form.clientNumber);
+    const selectedAttorney = attorneys.find(a => a.id === form.attorneyNumber);
+    
+    // FIX 2: Find the CaseType GUID based on the name selected
+    const selectedCaseType = caseTypes.find(t => t.name === form.type);
+
+    const payload = {
+      caseNumber: form.caseNumber || `CAS-${Date.now()}`,
+      caseName: form.title,
+      caseDescription: form.description || "No description provided",
+      dateOpened: new Date(form.dateOpened).toISOString(),
+      caseStatus: form.status,
+      caseTypeId: selectedCaseType?.id, // Use the real GUID
+      clientId: selectedClient?.id,
+      attorneyId: selectedAttorney?.id || null
+    };
+
+    try {
+      if (editingNumber) {
+        await api.put(`/Cases/${existing.id}`, payload);
+        goBack({ message: `Case updated.` });
+      } else {
+        await api.post('/Cases', payload);
+        goBack({ message: `Case registered successfully.` });
+      }
+    } catch (err) {
+      alert("Error saving case: " + err.message);
     }
   };
 
@@ -124,7 +145,7 @@ export default function CaseForm() {
                   <Form.Label>Case type *</Form.Label>
                   <Form.Select name="type" value={form.type} onChange={handleChange} isInvalid={!!errors.type}>
                     <option value="">Select...</option>
-                    {CASE_TYPES.map((t) => <option key={t}>{t}</option>)}
+                    {caseTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
                   </Form.Select>
                   <Form.Control.Feedback type="invalid">{errors.type}</Form.Control.Feedback>
                 </Form.Group>
@@ -145,7 +166,7 @@ export default function CaseForm() {
                   <Form.Select name="clientNumber" value={form.clientNumber} onChange={handleChange} isInvalid={!!errors.clientNumber}>
                     <option value="">Select a client...</option>
                     {clients.map((c) => (
-                      <option key={c.clientNumber} value={c.clientNumber}>
+                      <option key={c.id} value={c.id}>
                         {c.clientNumber} - {c.firstName} {c.surname}
                       </option>
                     ))}

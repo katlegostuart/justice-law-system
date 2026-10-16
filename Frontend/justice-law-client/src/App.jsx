@@ -32,14 +32,14 @@ export default function App() {
           <Route path="clients/edit/:id" element={<ClientForm />} />
           <Route path="cases" element={<Cases />} />
           <Route path="cases/new" element={<CaseForm />} />
+          <Route path="cases/edit/:id" element={<CaseForm />} />
           <Route path="attorneys" element={<Attorneys />} />
-<Route path="attorneys/new" element={<AttorneyForm />} />
-<Route path="attorneys/edit/:id" element={<AttorneyForm />} />
+          <Route path="attorneys/new" element={<AttorneyForm />} />
+          <Route path="attorneys/edit/:id" element={<AttorneyForm />} />
           <Route path="tasks" element={<Tasks />} />
-<Route path="tasks/new" element={<TaskForm />} />
-<Route path="tasks/:taskId/edit" element={<TaskForm />} />
+          <Route path="tasks/new" element={<TaskForm />} />
+          <Route path="tasks/edit/:id" element={<TaskForm />} />
         </Route>
-
         
 
         <Route path="/attorney" element={<ProtectedRoute allowedRole="Attorney"><Layout /></ProtectedRoute>}>

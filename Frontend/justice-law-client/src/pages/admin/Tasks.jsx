@@ -5,6 +5,7 @@ import Icon from '../../components/Icon';
 import { Avatar, PageHeader, StatCard, Pager, formatDate } from '../../components/ui';
 import { useData } from '../../context/DataContext';
 import { TASK_STATUSES, isOverdue } from '../../services/taskConfig';
+import api from '../../services/api';
 
 const PAGE_SIZE = 8;
 const byDueDate = (a, b) => (a.dueDate || '').localeCompare(b.dueDate || '');
@@ -35,7 +36,7 @@ function TaskStatus({ status }) {
 }
 
 export default function Tasks() {
-  const { attorneys, cases, tasks, setTasks, getAttorney } = useData();
+  const { attorneys, cases, tasks, getAttorney, refreshData } = useData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -96,10 +97,15 @@ export default function Tasks() {
   };
 
   // ---- delete ----
-  const confirmDelete = () => {
-    setTasks(tasks.filter((t) => t.taskId !== toDelete.taskId));
-    setMessage(`Task ${toDelete.taskId} deleted.`);
-    setToDelete(null);
+  const confirmDelete = async () => {
+    try {
+      await api.delete(`/LegalTasks/${toDelete.id}`);
+      setMessage(`Task ${toDelete.taskId} deleted.`);
+      setToDelete(null);
+      refreshData();
+    } catch (err) {
+      alert("Error deleting task: " + err.message);
+    }
   };
 
   return (
@@ -222,7 +228,7 @@ export default function Tasks() {
                     <td><TaskStatus status={t.status} /></td>
                     <td className="sticky-end">
                       <div className="row-actions">
-                        <button type="button" className="icon-btn" onClick={() => navigate(`/admin/tasks/${t.taskId}/edit`)} aria-label={`Edit ${t.taskId}`} title="Edit task">
+                        <button type="button" className="icon-btn" onClick={() => navigate(`/admin/tasks/edit/${t.id}`)} aria-label={`Edit ${t.taskId}`} title="Edit task">
                           <Icon name="edit" size={15} />
                         </button>
                         <button type="button" className="icon-btn danger" onClick={() => setToDelete(t)} aria-label={`Delete ${t.taskId}`} title="Delete task">

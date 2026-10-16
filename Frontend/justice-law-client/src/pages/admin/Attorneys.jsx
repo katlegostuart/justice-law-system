@@ -2,8 +2,12 @@ import Icon from '../../components/Icon';
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Form, Button, Table, Modal } from 'react-bootstrap';
-import { useAttorneys, removeAttorney, SPECIALIZATIONS, TIERS, SENIOR_TIERS } from './attorneyStore';
+import { useData } from '../../context/DataContext';
+import api from '../../services/api';
 
+const SPECIALIZATIONS = ['Commercial Law', 'Criminal Law', 'Family Law', 'Labor Law', 'Property Law', 'Civil Law'];
+const TIERS = ['Senior Partner', 'Junior Partner', 'Senior Counsel', 'Associate Advocate', 'Junior Advocate'];
+const SENIOR_TIERS = ['Senior Partner', 'Junior Partner', 'Senior Counsel'];
 const CHIPS = ['All Disciplines', 'Commercial', 'Criminal', 'Family', 'Labor', 'Property', 'Civil'];
 const PAGE_SIZE = 5;
 
@@ -51,7 +55,7 @@ const CSS = `
 `;
 
 export default function Attorneys() {
-  const { rows } = useAttorneys();
+  const { attorneys: rows, refreshData } = useData();
   const location = useLocation();
 
   const [query, setQuery] = useState('');
@@ -85,10 +89,15 @@ export default function Attorneys() {
   const disciplines = new Set(rows.map((a) => a.specialization)).size;
   const available = rows.filter((a) => a.caseload / a.capacity < 0.6).length;
 
-  const confirmDelete = () => {
-    removeAttorney(toDelete.id);
-    setNotice(`${toDelete.name} ${toDelete.surname} was removed.`);
-    setToDelete(null);
+  const confirmDelete = async () => {
+    try {
+      await api.delete(`/Attorneys/${toDelete.id}`);
+      setNotice(`${toDelete.name} ${toDelete.surname} was removed.`);
+      setToDelete(null);
+      refreshData();
+    } catch (err) {
+      alert("Error deleting attorney: " + err.message);
+    }
   };
 
   const exportCsv = () => {

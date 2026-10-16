@@ -4,6 +4,7 @@ import { Row, Col, Button, Form, Alert } from 'react-bootstrap';
 import Icon from '../../components/Icon';
 import { PageHeader } from '../../components/ui';
 import { useData } from '../../context/DataContext';
+import api from '../../services/api';
 
 const GENDERS = ['Male', 'Female', 'Other'];
 const emptyForm = {
@@ -31,15 +32,16 @@ function validate(form, clients, editingNumber) {
 // /admin/clients/new            -> register a new client
 // /admin/clients/CLI-4029/edit  -> edit an existing client
 export default function ClientForm() {
-  const { clientNumber: editingNumber } = useParams();
+  const { id: editingNumber } = useParams();
   const navigate = useNavigate();
-  const { clients, setClients, nextClientNumber } = useData();
+  const { clients, nextClientNumber } = useData();
 
-  const existing = editingNumber ? clients.find((c) => c.clientNumber === editingNumber) : null;
+  const existing = editingNumber ? clients.find((c) => c.id === editingNumber) : null;
 
   const [form, setForm] = useState(() => {
     if (!existing) return emptyForm;
-    const { clientNumber: _number, ...fields } = existing;
+    const fields = { ...existing };
+    delete fields.clientNumber;
     return fields;
   });
   const [errors, setErrors] = useState({});
@@ -57,21 +59,38 @@ export default function ClientForm() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const found = validate(form, clients, editingNumber);
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  const found = validate(form, clients, editingNumber);
+  setErrors(found);
+  if (Object.keys(found).length > 0) return;
 
-    if (editingNumber) {
-      setClients(clients.map((c) => (c.clientNumber === editingNumber ? { ...c, ...form } : c)));
-      goBack({ message: `Client ${editingNumber} updated.`, focus: editingNumber });
-    } else {
-      const clientNumber = nextClientNumber();
-      setClients([...clients, { clientNumber, ...form }]);
-      goBack({ message: `Client ${clientNumber} registered.`, focus: clientNumber });
-    }
+  // Map UI fields to API DTO fields
+  const payload = {
+    clientNumber: form.clientNumber || `CLI-${Date.now()}`, // Auto-generate if new
+    name: form.firstName,
+    surname: form.surname,
+    gender: form.gender,
+    dateOfBirth: new Date(form.dateOfBirth).toISOString(),
+    homeAddress: form.address,
+    email: form.email,
+    phoneNumber: form.phone,
+    idPassportNumber: form.idNumber
   };
+
+  try {
+    if (editingNumber) {
+      await api.put(`/Clients/${existing.id}`, payload);
+      goBack({ message: `Client updated.` });
+    } else {
+      await api.post('/Clients', payload);
+      goBack({ message: `Client registered.` });
+    }
+    window.location.reload(); // Refresh data
+  } catch (err) {
+    alert("Error saving client: " + err.message);
+  }
+};
 
   const field = (name, label, type = 'text', extra = {}) => (
     <Form.Group>

@@ -5,14 +5,14 @@ import Icon from '../../components/Icon';
 import { Avatar, PageHeader, StatCard, Pager, StatusPill, TypePill, formatDate } from '../../components/ui';
 import { useData } from '../../context/DataContext';
 import { CASE_TYPES, CASE_STATUSES } from '../../services/mockData';
+import api from '../../services/api';
 
 const PAGE_SIZE = 6;
 const newestFirst = (a, b) => b.dateOpened.localeCompare(a.dateOpened);
 
 export default function Cases() {
   const {
-    attorneys, cases, setCases, tasks, setTasks,
-    getAttorney, clientName, caseload, maxCaseload,
+    attorneys, cases, getAttorney, clientName, caseload, maxCaseload, refreshData
   } = useData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,11 +76,15 @@ export default function Cases() {
   };
 
   // ---- delete ----
-  const confirmDelete = () => {
-    setCases(cases.filter((c) => c.caseNumber !== toDelete.caseNumber));
-    setTasks(tasks.filter((t) => t.caseNumber !== toDelete.caseNumber));
-    setMessage(`Case ${toDelete.caseNumber} deleted.`);
-    setToDelete(null);
+  const confirmDelete = async () => {
+    try {
+      await api.delete(`/Cases/${toDelete.id}`);
+      setMessage(`Case ${toDelete.caseNumber} deleted.`);
+      setToDelete(null);
+      refreshData();
+    } catch (err) {
+      alert("Error deleting case: " + err.message);
+    }
   };
 
   // ---- assign attorney pop-up ----
@@ -102,12 +106,31 @@ export default function Cases() {
     setAssignError('');
   };
 
-  const confirmAssign = () => {
+  const confirmAssign = async () => {
     if (!assignTo) return setAssignError('Please select an attorney.');
     if (!conflictChecked) return setAssignError('Please confirm the conflict check before assigning.');
-    setCases(cases.map((c) => (c.caseNumber === assigning.caseNumber ? { ...c, attorneyNumber: assignTo } : c)));
-    setMessage(`${getAttorney(assignTo).name} assigned to ${assigning.caseNumber}.`);
-    setAssigning(null);
+    
+    try {
+      const attorney = getAttorney(assignTo);
+      
+      const payload = {
+        caseNumber: assigning.caseNumber,
+        caseName: assigning.title,
+        caseDescription: assigning.description || " ",
+        dateOpened: new Date(assigning.dateOpened).toISOString(),
+        caseStatus: assigning.status,
+        caseTypeId: assigning.caseTypeId,
+        clientId: assigning.clientId,
+        attorneyId: attorney.id
+      };
+
+      await api.put(`/Cases/${assigning.id}`, payload);
+      setMessage(`${attorney.name} assigned to ${assigning.caseNumber}.`);
+      setAssigning(null);
+      refreshData();
+    } catch (err) {
+      setAssignError("Error assigning attorney: " + err.message);
+    }
   };
 
   return (
@@ -233,7 +256,7 @@ export default function Cases() {
                         <button type="button" className="icon-btn accent" onClick={() => openAssign(c)} aria-label={`Assign attorney to ${c.caseNumber}`} title="Assign attorney">
                           <Icon name="userCheck" size={15} />
                         </button>
-                        <button type="button" className="icon-btn" onClick={() => navigate(`/admin/cases/${c.caseNumber}/edit`)} aria-label={`Edit ${c.caseNumber}`} title="Edit case">
+                        <button type="button" className="icon-btn" onClick={() => navigate(`/admin/cases/edit/${c.id}`)} aria-label={`Edit ${c.caseNumber}`} title="Edit case">
                           <Icon name="edit" size={15} />
                         </button>
                         <button type="button" className="icon-btn danger" onClick={() => setToDelete(c)} aria-label={`Delete ${c.caseNumber}`} title="Delete case">
