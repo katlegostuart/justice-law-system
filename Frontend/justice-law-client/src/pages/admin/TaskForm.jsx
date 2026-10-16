@@ -144,15 +144,17 @@ export default function TaskForm() {
                   <Form.Control.Feedback type="invalid">{errors.caseNumber}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
-              <Col md={6}>
+                            <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Assigned attorney</Form.Label>
-                  <Form.Select name="attorneyNumber" value={form.attorneyNumber} onChange={handleChange}>
-                    <option value="">Not assigned yet</option>
-                    {attorneys.map((a) => (
-                      <option key={a.staffNumber} value={a.staffNumber}>{a.staffNumber} - {a.name}</option>
-                    ))}
-                  </Form.Select>
+                  <Form.Label>Assigned attorney (from the case)</Form.Label>
+                  <Form.Control
+                    readOnly
+                    value={(() => {
+                      const c = cases.find((x) => x.caseNumber === form.caseNumber);
+                      const a = c && attorneys.find((x) => x.staffNumber === c.attorneyNumber);
+                      return a ? `${a.staffNumber} - ${a.name}` : 'Assign an attorney to the case first';
+                    })()}
+                  />
                 </Form.Group>
               </Col>
 

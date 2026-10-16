@@ -15,6 +15,7 @@ import { DataProvider } from './context/DataContext';
 import AttorneyForm from './pages/admin/AttorneyForm';
 import Tasks from './pages/admin/Tasks';
 import TaskForm from './pages/admin/TaskForm';
+import ApiStatus from './components/ApiStatus';
 
 
 
@@ -54,6 +55,9 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      
+      <ApiStatus />
+      
     </DataProvider>
   );
 }

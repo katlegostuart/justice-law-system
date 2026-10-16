@@ -95,12 +95,42 @@ namespace JusticeLaw.API.Controllers
                 expires: DateTime.UtcNow.AddHours(2),
                 signingCredentials: credentials);
 
-            return Ok(new
-            {
-                token = new JwtSecurityTokenHandler().WriteToken(token),
-                email = user.Email,
-                role = roles.FirstOrDefault()
-            });
+            string name = user.Email!;
+string? staffNumber = null;
+string? clientNumber = null;
+
+if (roles.Contains("Attorney"))
+{
+    var attorney = dbContext.Attorneys.FirstOrDefault(a => a.UserId == user.Id || a.Email == user.Email);
+    if (attorney != null)
+    {
+        staffNumber = attorney.StaffNumber;
+        name = $"{attorney.Name} {attorney.Surname}".Trim();
+    }
+}
+else if (roles.Contains("Client"))
+{
+    var client = dbContext.Clients.FirstOrDefault(c => c.UserId == user.Id || c.Email == user.Email);
+    if (client != null)
+    {
+        clientNumber = client.ClientNumber;
+        name = $"{client.Name} {client.Surname}".Trim();
+    }
+}
+else
+{
+    name = "Admin User";
+}
+
+return Ok(new
+{
+    token = new JwtSecurityTokenHandler().WriteToken(token),
+    email = user.Email,
+    role = roles.FirstOrDefault(),
+    name,
+    staffNumber,
+    clientNumber
+});
         }
     }
 }
