@@ -1,213 +1,32 @@
 /*
-  AttorneyDashboard.jsx
+  AttorneyDashboard.jsx  (live data version)
 
   Exports:
-    default -> AttorneyDashboard (my cases, client, case details)
-    named   -> LegalTasksPage    (Legal Activity & Milestone Tracker)
+    default -> AttorneyDashboard (my assigned cases, client information, tasks per case)
+    named   -> LegalTasksPage    (all my legal tasks: add, edit, record progress)
+    named   -> MyCasesPage       (same case workspace without the profile header)
 
   Routes (App.jsx):
-    /attorney        -> AttorneyDashboard
-    /attorney/tasks  -> LegalTasksPage
+    /attorney             -> AttorneyDashboard
+    /attorney/cases       -> MyCasesPage
+    /attorney/tasks       -> LegalTasksPage
+    /attorney/tasks/new   -> AttorneyTaskForm  (create a task)
+    /attorney/tasks/edit/:id -> AttorneyTaskForm (edit a task)
 
-  Props:
-    withShell (default true) draws the sidebar and top bar.
-    Use withShell={false} if the page sits inside a shared layout.
-
-  Mock data only. Replace CASES / CLIENTS / TRACKER_TASKS with API calls later.
+  Data comes from DataContext, which loads it from the API. The backend only
+  returns the cases and tasks that belong to the logged-in attorney.
 */
-import { useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-
-/* ================= Routes and navigation ================= */
-const ROUTES = {
-  dashboard: '/attorney',
-  clients: '/attorney/clients',
-  cases: '/attorney/cases',
-  tasks: '/attorney/tasks',
-  research: '/attorney/settings',
-};
-
-/* Attorney-only navigation */
-const NAV = [
-  { label: 'Overview / Dashboard', icon: 'grid', to: ROUTES.dashboard },
-  { label: 'Clients Management', icon: 'users', to: ROUTES.clients },
-  { label: 'Cases & Dockets', icon: 'folder', to: ROUTES.cases },
-  { label: 'Legal Tasks & Activities', icon: 'check', to: ROUTES.tasks },
-  { label: 'Research & Settings', icon: 'book', to: ROUTES.research },
-];
-
-/* ================= Mock data ================= */
-const ATTORNEY = {
-  name: 'Adv. Thabo Sithole',
-  short: 'Adv. T. Sithole',
-  title: 'Senior Counsel',
-  initials: 'TS',
-  staffId: 'STF-102',
-  role: 'Counsel Partner',
-  practice: 'Commercial & Corporate Litigation — Johannesburg Chambers',
-  barRoll: '2011/SC-589',
-  security: 'Master Security Lvl IV',
-  active: 6,
-  max: 8,
-};
-
-const CLIENTS = {
-  vance: {
-    id: 'CLI-4029', name: 'Eleanor Vance', kind: 'Principal / Natural Person', company: 'Vance Tech Holdings (Pty) Ltd',
-    idNo: '880419 0122 083', email: 'e.vance@vancetech.co.za', phone: '+27 (0)82 441 9081',
-    address: 'Sandhurst Corporate Enclave, Sandton', retainer: 'R 185,000.00', trust: 'STB-88019-LAW', initials: 'EV',
-  },
-  sterling: {
-    id: 'CLI-5110', name: 'Sterling Logistics Ltd', kind: 'Corporate / Commercial', company: 'Sterling Logistics Ltd',
-    idNo: '2014/194021/07', email: 'legal@sterlinglog.co.za', phone: '+27 (0)11 880 2900',
-    address: 'Midrand Business Park, Midrand', retainer: 'R 120,000.00', trust: 'STB-51100-LAW', initials: 'SL',
-  },
-  archer: {
-    id: 'CLI-2094', name: 'Claire Archer-Smit', kind: 'Natural Person', company: 'Cape Wineries',
-    idNo: '820314 0041 089', email: 'claire.archer@capewineries.com', phone: '+27 (0)83 552 1198',
-    address: 'Cape Winelands Estate, Stellenbosch', retainer: 'R 45,000.00', trust: 'STB-20940-LAW', initials: 'CA',
-  },
-  transglobal: {
-    id: 'CLI-1190', name: 'TransGlobal Capital PLC', kind: 'Foreign Corp Entity', company: 'TransGlobal Capital PLC',
-    idNo: 'UK-CR-8921104', email: 'dossiers@transglobalcap.co.uk', phone: '+44 20 7946 0912',
-    address: 'London, United Kingdom', retainer: 'R 310,000.00', trust: 'STB-11900-LAW', initials: 'TG',
-  },
-};
-
-const CASES = [
-  {
-    id: 1, ref: 'CAS-2024-0891', title: 'Vanderbilt Asset Restructuring', type: 'Commercial Law',
-    label: 'In Progress', group: 'In Progress', clientKey: 'vance', clientLabel: 'Vance Tech Holdings (Eleanor Vance)', clientIcon: 'building',
-    meta: { icon: 'calendar', text: '28 Apr 2024' },
-    detail: {
-      priority: 'High Priority', caseNo: '2024/09182', court: 'High Court Johannesburg (Gauteng Local Division)',
-      milestones: ['1. Summons Issued', '2. Notice of Motion', '3. Replying Affidavit', '4. Enrolled Hearing'], step: 3, note: 'Motion Hearing in 6 Days',
-      seat: 'High Court of South Africa', seat2: 'Gauteng Local Division (JHB)', judge: 'Judge Sutherland', judge2: 'Deputy Judge President',
-      opened: '12 Jan 2024', compliance: 'Rule 35(12) Compliance Pending',
-      summary: 'Multi-jurisdictional commercial dispute regarding the alleged breach of an asset acquisition covenant under Section 42 of the South African Companies Act. Applicant seeks an urgent interlocutory interdict freezing corporate equity transfers pending the full forensic discovery of audited ledger supplements for Q3-Q4 2023. Senior counsel settlement conferences are scheduled ahead of the contested motion court roll on 28 April 2024.',
-      tasks: [
-        { title: 'Draft Replying Affidavit', desc: 'Rule 35(12) High Court Discovery', due: 'Due Tomorrow', tone: 'red', icon: 'clock' },
-        { title: 'Review Forensic Audit', desc: 'Asset Schedule B Valuations', due: 'Due 30 Apr', tone: 'grey', icon: 'circle' },
-        { title: 'Client Briefing & Settlement', desc: 'Strategy Conference with E. Vance', due: '20 Apr', tone: 'done', icon: 'checkcircle' },
-      ],
-      filings: [
-        { name: 'Notice_of_Motion_Urgent.pdf', meta: 'Filed 15 Mar 2024 • 4.2 MB', icon: 'file', action: 'download' },
-        { name: 'Founding_Affidavit_Vance_Sworn.pdf', meta: 'Commissioner Stamp • 18 Mar 2024', icon: 'file', action: 'download' },
-        { name: 'Settlement_Proposal_Confidential.pdf', meta: 'Without Prejudice • 14 Apr 2024', icon: 'lock', action: 'eye' },
-      ],
-    },
-  },
-  {
-    id: 2, ref: 'CAS-2024-0944', title: 'Apex Logistics vs TransRail Arbitration', type: 'Labor & Commercial',
-    label: 'In Progress', group: 'In Progress', clientKey: 'sterling', clientLabel: 'Sterling Logistics Ltd', clientIcon: 'building',
-    meta: { icon: 'calendar', text: '15 May 2024' },
-    detail: {
-      caseNo: '2024/11206', court: 'Labour Appeal Court',
-      milestones: ['1. Referral Lodged', '2. Pleadings Exchanged', '3. Pre-Arbitration Conference', '4. Arbitration Sitting'], step: 2, note: 'Arbitration on 12 May',
-      seat: 'Labour Appeal Court', seat2: 'Johannesburg Seat', judge: 'Arbitrator to be confirmed', judge2: 'Panel appointment pending',
-      opened: '28 Feb 2024', compliance: 'Pleadings Exchange Pending',
-      summary: 'Arbitration between Apex Logistics and TransRail concerning an alleged breach of a freight services agreement. Bargaining council referral and pleadings are being prepared ahead of the 12 May sitting.',
-      tasks: [
-        { title: 'Prepare Statement of Case', desc: 'Freight services agreement breach', due: 'Due 22 Apr', tone: 'grey', icon: 'circle' },
-        { title: 'Witness Preparation', desc: 'Operations manager and finance lead', due: 'Due 03 May', tone: 'grey', icon: 'circle' },
-      ],
-      filings: [{ name: 'Referral_Form_Bargaining_Council.pdf', meta: 'Filed 02 Mar 2024 • 1.1 MB', icon: 'file', action: 'download' }],
-    },
-  },
-  {
-    id: 3, ref: 'CAS-2024-1055', title: 'Helios Solar Infrastructure Breach', type: 'Civil Law',
-    label: 'Pending Hearing', group: 'Pending Hearing', clientKey: 'archer', clientLabel: 'Claire Archer-Smit', clientIcon: 'user',
-    meta: { icon: 'check', text: 'Pleadings Closed' },
-    detail: {
-      caseNo: '2024/15733', court: 'High Court of South Africa (Provincial Division)',
-      milestones: ['1. Summons Issued', '2. Pleadings Closed', '3. Hearing Date Allocated', '4. Trial'], step: 2, note: 'Awaiting hearing date',
-      seat: 'High Court of South Africa', seat2: 'Provincial Division', judge: 'To be allocated', judge2: 'Hearing date pending',
-      opened: '02 Apr 2024', compliance: 'Pleadings Closed',
-      summary: 'Civil claim for breach of a solar infrastructure supply contract. Pleadings are closed and the matter is awaiting allocation of a hearing date.',
-      tasks: [{ title: 'Request Hearing Date', desc: 'Application to the Registrar', due: 'Due 26 Apr', tone: 'grey', icon: 'circle' }],
-      filings: [{ name: 'Particulars_of_Claim.pdf', meta: 'Filed 05 Apr 2024 • 2.3 MB', icon: 'file', action: 'download' }],
-    },
-  },
-  {
-    id: 4, ref: 'CAS-2023-0419', title: 'Khumalo Mineral Concession Deeds', type: 'Property Law',
-    label: 'Review', group: 'In Progress', clientKey: 'transglobal', clientLabel: 'TransGlobal Capital PLC', clientIcon: 'building',
-        meta: { icon: 'file', text: 'Deeds Office' },
-    detail: {
-      caseNo: '2023/08841', court: 'Deeds Registry (Gauteng)',
-      milestones: ['1. Mandate Accepted', '2. Deeds Drafted', '3. Lodged at Deeds Office', '4. Registration Complete'], step: 3, note: 'Awaiting registry examination',
-      seat: 'Deeds Registry, Pretoria', seat2: 'Gauteng Province', judge: 'Registrar of Deeds', judge2: 'Examination pending',
-      opened: '19 Nov 2023', compliance: 'Rates clearance pending',
-      summary: 'Registration of mineral concession deeds on behalf of the client. Deeds have been drafted and lodged, and the matter is awaiting examination by the Deeds Office before registration can be completed.',
-      tasks: [
-        { title: 'Follow Up With Deeds Office', desc: 'Check examination status', due: 'Due 18 Apr', tone: 'red', icon: 'clock' },
-        { title: 'Obtain Rates Clearance', desc: 'Municipal clearance certificate', due: 'Due 29 Apr', tone: 'grey', icon: 'circle' },
-        { title: 'Draft Deeds of Concession', desc: 'Prepared and lodged', due: '02 Apr', tone: 'done', icon: 'checkcircle' },
-      ],
-      filings: [
-        { name: 'Deeds_of_Concession_Lodged.pdf', meta: 'Lodged 04 Apr 2024 • 3.1 MB', icon: 'file', action: 'download' },
-        { name: 'Mandate_Letter_TransGlobal.pdf', meta: 'Signed • 19 Nov 2023', icon: 'lock', action: 'eye' },
-      ],
-    },
-  },
-  {
-    id: 5, ref: 'CAS-2024-1120', title: 'Metropolitan Fleet Supply Dispute', type: 'Commercial Law',
-    label: 'Open', group: 'Open', clientKey: 'vance', clientLabel: 'Vance Tech Holdings', clientIcon: 'building',
-        meta: { icon: 'file', text: 'Summons Drafted' },
-    detail: {
-      caseNo: '2024/17120', court: 'High Court Johannesburg (Gauteng Local Division)',
-      milestones: ['1. Letter of Demand', '2. Summons Drafted', '3. Summons Issued', '4. Pleadings'], step: 2, note: 'Summons ready to issue',
-      seat: 'High Court of South Africa', seat2: 'Gauteng Local Division (JHB)', judge: 'To be allocated', judge2: 'Not yet enrolled',
-      opened: '20 Apr 2024', compliance: 'Summons awaiting issue',
-      summary: 'Commercial dispute over the supply of a vehicle fleet. A letter of demand went unanswered and summons has been drafted, ready to be issued and served on the defendant.',
-      tasks: [
-        { title: 'Issue and Serve Summons', desc: 'Lodge with the Registrar', due: 'Due 25 Apr', tone: 'red', icon: 'clock' },
-        { title: 'Collect Supply Contracts', desc: 'Client to send signed copies', due: 'Due 30 Apr', tone: 'grey', icon: 'circle' },
-      ],
-      filings: [
-        { name: 'Letter_of_Demand.pdf', meta: 'Sent 08 Apr 2024 • 0.4 MB', icon: 'file', action: 'download' },
-        { name: 'Combined_Summons_Draft.pdf', meta: 'Draft • 20 Apr 2024', icon: 'file', action: 'download' },
-      ],
-    },
-  },
-  {
-    id: 6, ref: 'CAS-2024-1203', title: 'Sterling Logistics Employment Contract Review', type: 'Labor Law',
-    label: 'In Progress', group: 'In Progress', clientKey: 'sterling', clientLabel: 'Sterling Logistics Ltd', clientIcon: 'building',
-        meta: { icon: 'calendar', text: '30 May 2024' },
-    detail: {
-      caseNo: '2024/19203', court: 'Advisory matter (no court)',
-      milestones: ['1. Contracts Collected', '2. Legal Review', '3. Client Feedback', '4. Final Opinion'], step: 2, note: 'Opinion due 30 May',
-      seat: 'Advisory matter', seat2: 'Johannesburg Chambers', judge: 'Not applicable', judge2: 'Non-litigious',
-      opened: '02 May 2024', compliance: 'Labour Relations Act review',
-      summary: 'Review of the client\'s standard employment contracts for compliance with the Labour Relations Act and the Basic Conditions of Employment Act, with a written opinion and recommended amendments.',
-      tasks: [
-        { title: 'Complete Contract Review', desc: 'All 12 contract templates', due: 'Due 20 May', tone: 'grey', icon: 'circle' },
-        { title: 'Draft Written Opinion', desc: 'Recommended amendments', due: 'Due 28 May', tone: 'grey', icon: 'circle' },
-      ],
-      filings: [{ name: 'Employment_Contract_Templates.zip', meta: 'Received 02 May 2024 • 6.8 MB', icon: 'file', action: 'download' }],
-    },
-  },
-];
-
-const GENERIC_MILESTONES = ['1. Matter Opened', '2. Pleadings', '3. Hearing Preparation', '4. Hearing / Outcome'];
-
-const TRACKER_TASKS = [
-  { id: 'TSK-8820', title: 'Draft Share Purchase Agreement', desc: 'Incorporates indemnity clauses and shareholder restructuring annexures.', date: '24 Oct 2024', dateNote: 'Archived in Court Vault', dateTone: 'ok', counsel: 'Adv. T. Sithole', counselNote: 'Validated & Sealed', status: 'Completed' },
-  { id: 'TSK-8835', title: 'Prepare Affidavit for High Court Discovery', desc: 'Rule 35(1) financial declaration documentation and balance audit filing.', date: 'Due 04 Nov 2024', dateNote: 'Filing Deadline Imminent', dateTone: 'warn', counsel: 'Adv. T. Sithole', counselNote: 'Drafting in Progress', status: 'In Progress' },
-  { id: 'TSK-8840', title: 'Schedule Client Pre-Trial Consultation', desc: 'Comprehensive strategy review with lead counsel ahead of formal motion.', date: 'Due 08 Nov 2024', dateNote: 'Sandton Chambers or Virtual', dateTone: 'muted', counsel: 'Adv. T. Sithole / Registry', counselNote: 'Awaiting Diary Allocation', status: 'In Progress' },
-  { id: 'TSK-8841', title: 'File Master Court Documentation', desc: 'Registrar endorsement and official service to counterpart attorneys.', date: 'Due 15 Nov 2024', dateNote: 'Dependent on TSK-8835', dateTone: 'muted', counsel: 'High Court Registrar Clerk', counselNote: 'Pending Service Docket', status: 'Not Started' },
-];
-
-const TRACKER_FILTERS = [
-  { key: 'All Tasks', match: () => true },
-  { key: 'In Progress', match: (t) => t.status === 'In Progress' },
-  { key: 'Completed', match: (t) => t.status === 'Completed' },
-  { key: 'Pending Schedule', match: (t) => t.status === 'Not Started' },
-];
-
-const CASE_FILTERS = ['All', 'In Progress', 'Pending Hearing', 'Open'];
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
+import { formatDate } from '../components/ui';
+import { TASK_STATUSES, isOverdue } from '../services/taskConfig';
+import api from '../services/api';
 
 /* ================= Icons (inline SVG, no extra package) ================= */
 const ICONS = {
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
@@ -444,83 +263,89 @@ const CSS = `
 /* Responsive */
 @media (max-width:1100px){.jl-grid,.jl-two,.jl-cl{grid-template-columns:1fr}}
 @media (max-width:900px){.jl{flex-direction:column}.jl-side{width:auto;flex:none;height:auto;position:static}.jl-jp{grid-template-columns:1fr}}
+
+/* Live-data additions */
+.jl-st-closed{background:#e2e8f0;color:#475569}
+.jl-stat.complete{background:#dcfce7;color:#15803d}
+.jl-btn.sm{padding:5px 10px;font-size:11px}
+.jl-pick{border:1px solid #e2e8f0;border-radius:999px;padding:3px 8px;font:inherit;font-size:11px;font-weight:700;cursor:pointer;background:#f1f5f9;color:#475569}
+.jl-pick.inprogress{background:#fef3c7;color:#b45309;border-color:#fde68a}
+.jl-pick.complete{background:#dcfce7;color:#15803d;border-color:#bbf7d0}
+.jl-pick:disabled{opacity:.6;cursor:wait}
+.jl-alert{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px}
+.jl-ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+.jl-ok button{background:none;border:0;font-size:18px;line-height:1;cursor:pointer;color:inherit}
+.jl-bar-tools{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.jl-bar-tools .jl-chips{margin-bottom:0}
+.jl-filters{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.jl-field{border:1px solid #e2e8f0;background:#f8faff;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;min-width:200px;flex:1;max-width:340px}
+.jl-cl-l a{color:#1e3a8a}
 `;
 
-/* ================= Shared shell: sidebar + top bar ================= */
-function Shell({ withShell, children }) {
-  const { pathname } = useLocation();
+/* ================= Small helpers ================= */
+const initialsOf = (name) =>
+  (name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase() || 'A';
 
-  const isActive = (to) =>
-    to === ROUTES.dashboard
-      ? pathname === to || pathname === `${to}/`
-      : pathname.startsWith(to);
+const byDueDate = (a, b) => (a.dueDate || '').localeCompare(b.dueDate || '');
 
-  if (!withShell) {
-    return (
-      <>
-        <style>{CSS}</style>
-        <div className="jl">
-          <div className="jl-main">
-            <div className="jl-page">{children}</div>
-          </div>
-        </div>
-      </>
-    );
-  }
+const CASE_STATUS_CLASS = { 'In Progress': 'prog', 'Pending Hearing': 'pend', Review: 'rev', Open: 'open', Closed: 'closed' };
 
+function CaseStatusPill({ label, className = '' }) {
+  return (
+    <span className={`jl-st jl-st-${CASE_STATUS_CLASS[label] || 'open'} ${className}`}>
+      <i />
+      {label || 'Open'}
+    </span>
+  );
+}
+
+// The logged-in attorney: name and staff number come from the login, the rest from the API when available.
+function useAttorneyProfile() {
+  const { user } = useAuth();
+  const { attorneys, getAttorney } = useData();
+  const record = getAttorney(user?.staffNumber) || attorneys[0] || null;
+  const name = user?.name || (record ? `${record.name} ${record.surname}` : 'Attorney');
+  return {
+    name,
+    initials: initialsOf(name),
+    staffNumber: user?.staffNumber || record?.staffNumber || '',
+    specialization: record?.specialization || '',
+    email: user?.email || record?.email || '',
+  };
+}
+
+// Tasks that belong to the attorney's own cases, soonest due date first.
+function useMyTasks() {
+  const { cases, tasks } = useData();
+  return useMemo(() => {
+    const mine = new Set(cases.map((c) => c.caseNumber));
+    return tasks.filter((t) => mine.has(t.caseNumber)).sort(byDueDate);
+  }, [cases, tasks]);
+}
+
+// Records progress: sends the task back to the API with its new status.
+async function saveTaskStatus(task, status) {
+  await api.put(`/LegalTasks/${task.id}`, {
+    taskName: task.title,
+    description: task.description || 'No description',
+    dueDate: new Date(task.dueDate).toISOString(),
+    status,
+    caseId: task.caseId,
+  });
+}
+
+function Shell({ children }) {
   return (
     <>
       <style>{CSS}</style>
       <div className="jl">
-        <aside className="jl-side">
-          <div className="jl-logo">
-            <Icon name="scales" size={30} />
-            <div>
-              <b>JUSTICELAW</b>
-              <small>ATTORNEYS</small>
-            </div>
-          </div>
-          <div className="jl-sec">LEGAL OPERATIONS</div>
-          <nav className="jl-nav" aria-label="Attorney navigation">
-            {NAV.map((item) => (
-              <Link key={item.to} to={item.to} className={isActive(item.to) ? 'on' : ''}>
-                <Icon name={item.icon} size={16} />
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="jl-sidefoot">
-            <div>
-              <span>JURISDICTION</span>
-              <b>High Court</b>
-            </div>
-            <div>Docket Filing Sync: Active</div>
-          </div>
-        </aside>
-
         <div className="jl-main">
-          <header className="jl-top">
-            <div className="jl-gs">
-              <Icon name="search" size={15} />
-              <input placeholder="Search docket, clients, matters..." aria-label="Search docket, clients, matters" />
-            </div>
-            <div className="jl-topr">
-              <span className="jl-cp">
-                <i />
-                {ATTORNEY.role}
-              </span>
-              <span className="jl-bell" aria-label="Notifications">
-                <Icon name="bell" size={18} />
-              </span>
-              <div className="jl-me">
-                <div>
-                  <b>{ATTORNEY.short}</b>
-                  <small>{ATTORNEY.title}</small>
-                </div>
-                <div className="jl-av">{ATTORNEY.initials}</div>
-              </div>
-            </div>
-          </header>
           <div className="jl-page">{children}</div>
         </div>
       </div>
@@ -528,133 +353,206 @@ function Shell({ withShell, children }) {
   );
 }
 
-/* ================= Small shared pieces ================= */
-const STATUS_CLASS = { 'In Progress': 'prog', 'Pending Hearing': 'pend', Review: 'rev', Open: 'open' };
-
-function StatusPill({ label, className = '' }) {
+/* Task table, used on the dashboard (one case) and on the tasks page (all cases) */
+function TaskTable({ rows, showCase, busyId, onStatus }) {
   return (
-    <span className={`jl-st jl-st-${STATUS_CLASS[label] || 'open'} ${className}`}>
-      <i />
-      {label}
-    </span>
+    <div className="jl-tw">
+      <table className="jl-table">
+        <thead>
+          <tr>
+            <th>TASK ID</th>
+            <th>TASK</th>
+            {showCase && <th>CASE</th>}
+            <th>DUE DATE</th>
+            <th>STATUS</th>
+            <th aria-label="Actions" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={showCase ? 6 : 5} className="jl-empty">
+                No tasks to show.
+              </td>
+            </tr>
+          )}
+          {rows.map((t) => (
+            <tr key={t.id}>
+              <td>
+                <span className="jl-tid jl-mono">{t.taskId}</span>
+              </td>
+              <td>
+                <b>{t.title}</b>
+                {t.description && <small>{t.description}</small>}
+              </td>
+              {showCase && <td>{t.caseNumber || '—'}</td>}
+              <td style={{ whiteSpace: 'nowrap' }}>
+                {t.dueDate ? formatDate(t.dueDate) : '—'}
+                {isOverdue(t) && <small className="jl-tone-warn">Overdue</small>}
+              </td>
+              <td>
+                <select
+                  className={`jl-pick ${t.status.replace(/\s/g, '').toLowerCase()}`}
+                  value={t.status}
+                  disabled={busyId === t.id}
+                  aria-label={`Status of ${t.taskId}`}
+                  onChange={(e) => onStatus(t, e.target.value)}
+                >
+                  {TASK_STATUSES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <Link className="jl-btn sm" to={`/attorney/tasks/edit/${t.id}`}>
+                  <Icon name="edit" size={13} /> Edit
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
+// Shared by both pages: change a task's status and refresh the data.
+function useStatusChange() {
+  const { refreshData } = useData();
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState('');
+
+  const onStatus = async (task, status) => {
+    setBusyId(task.id);
+    setError('');
+    try {
+      await saveTaskStatus(task, status);
+      await refreshData();
+    } catch (err) {
+      setError(
+        err.response?.status === 403
+          ? 'You can only update tasks on your own cases.'
+          : `Could not update the task: ${err.message}`
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return { busyId, error, onStatus };
+}
+
 /* ================= Page 1: Attorney dashboard ================= */
-export default function AttorneyDashboard({ withShell = false, casesOnly = false }) {
+export default function AttorneyDashboard({ casesOnly = false }) {
+  const { cases, getClient, maxCaseload } = useData();
+  const profile = useAttorneyProfile();
+  const myTasks = useMyTasks();
+  const { busyId, error, onStatus } = useStatusChange();
+
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
-  const [selectedId, setSelectedId] = useState(CASES[0].id);
+  const [selectedId, setSelectedId] = useState(null);
 
-  const counts = useMemo(
-    () => ({
-      All: CASES.length,
-      'In Progress': CASES.filter((c) => c.group === 'In Progress').length,
-      'Pending Hearing': CASES.filter((c) => c.group === 'Pending Hearing').length,
-      Open: CASES.filter((c) => c.group === 'Open').length,
-    }),
-    []
+  const statuses = useMemo(
+    () => ['All', ...Array.from(new Set(cases.map((c) => c.status).filter(Boolean)))],
+    [cases]
   );
+  const countFor = (s) => (s === 'All' ? cases.length : cases.filter((c) => c.status === s).length);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return CASES.filter(
+    return cases.filter(
       (c) =>
-        (filter === 'All' || c.group === filter) &&
-        `${c.ref} ${c.title} ${c.clientLabel}`.toLowerCase().includes(q)
+        (filter === 'All' || c.status === filter) &&
+        `${c.caseNumber} ${c.title} ${c.type}`.toLowerCase().includes(q)
     );
-  }, [query, filter]);
+  }, [cases, query, filter]);
 
-  const selected = CASES.find((c) => c.id === selectedId) || CASES[0];
-  const d = selected.detail || {};
-  const client = CLIENTS[selected.clientKey];
-  const milestones = d.milestones || GENERIC_MILESTONES;
-  const step = d.step || 1;
-  const tasks = d.tasks || [];
-  const filings = d.filings || [];
-  const pct = Math.round((ATTORNEY.active / ATTORNEY.max) * 100);
+  const selected = cases.find((c) => c.id === selectedId) || visible[0] || cases[0] || null;
+  const client = selected ? getClient(selected.clientNumber) || getClient(selected.clientId) : null;
+  const caseTasks = selected ? myTasks.filter((t) => t.caseNumber === selected.caseNumber) : [];
+
+  const activeCases = cases.filter((c) => c.status !== 'Closed').length;
+  const capacity = Math.min(100, Math.round((activeCases / maxCaseload) * 100));
+  const openTasks = myTasks.filter((t) => t.status !== 'Complete').length;
+  const overdueTasks = myTasks.filter(isOverdue).length;
+  const doneTasks = myTasks.filter((t) => t.status === 'Complete').length;
 
   return (
-    <Shell withShell={withShell}>
-          {casesOnly && (
+    <Shell>
+      {casesOnly ? (
         <div className="jl-ph">
           <div>
             <div className="jl-lbl jl-orange">LEGAL OPERATIONS • CASES &amp; DOCKETS</div>
             <h1>My Cases</h1>
           </div>
-          <span className="jl-total">{CASES.length} Total</span>
+          <span className="jl-total">{cases.length} Total</span>
         </div>
+      ) : (
+        <section className="jl-prof">
+          <div className="jl-prof-l">
+            <div className="jl-ava">{profile.initials}</div>
+            <div>
+              <h1>
+                {profile.name}
+                {profile.staffNumber && <span className="jl-idchip">ID #{profile.staffNumber}</span>}
+                <span className="jl-role">Attorney</span>
+              </h1>
+              {profile.specialization && <div className="jl-sub">{profile.specialization}</div>}
+              {profile.email && (
+                <div className="jl-sub2">
+                  <span>
+                    <Icon name="mail" size={13} /> {profile.email}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="jl-kpis">
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="briefcase" size={12} /> ACTIVE CASES
+              </div>
+              <div className="jl-kv">
+                <b>{activeCases}</b> / {maxCaseload} Max
+              </div>
+              <div className="jl-bar">
+                <i style={{ width: `${capacity}%` }} />
+              </div>
+              <div className="jl-km">{capacity}% Caseload cap</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="file" size={12} /> OPEN TASKS
+              </div>
+              <div className="jl-kv">
+                <b>{openTasks}</b>
+              </div>
+              <div className="jl-km">Across {cases.length} cases</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="clock" size={12} /> OVERDUE
+              </div>
+              <div className="jl-kv">
+                <b className={overdueTasks > 0 ? 'jl-orange' : ''}>{overdueTasks}</b>
+              </div>
+              <div className="jl-km">{overdueTasks > 0 ? 'Past the due date' : 'Nothing overdue'}</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="checkcircle" size={12} /> COMPLETED
+              </div>
+              <div className="jl-kv">
+                <b>{doneTasks}</b> of {myTasks.length}
+              </div>
+              <div className="jl-km">Tasks finished</div>
+            </div>
+          </div>
+        </section>
       )}
 
-      {/* Profile header (dashboard only) */}
-      {!casesOnly && (
-      <section className="jl-prof">
-        <div className="jl-prof-l">
-          <div className="jl-ava">{ATTORNEY.initials}</div>
-          <div>
-            <h1>
-              {ATTORNEY.name}
-              <span className="jl-idchip">ID #{ATTORNEY.staffId}</span>
-              <span className="jl-role">{ATTORNEY.role}</span>
-            </h1>
-            <div className="jl-sub">{ATTORNEY.practice}</div>
-            <div className="jl-sub2">
-              <span>
-                <Icon name="scales" size={13} /> Bar Roll No: {ATTORNEY.barRoll}
-              </span>
-              <span>
-                <Icon name="shield" size={13} /> {ATTORNEY.security}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="jl-kpis">
-          <div className="jl-kpi">
-            <div className="jl-kl">
-              <Icon name="briefcase" size={12} /> ACTIVE CASES
-            </div>
-            <div className="jl-kv">
-              <b>{ATTORNEY.active}</b> / {ATTORNEY.max} Max
-            </div>
-            <div className="jl-bar">
-              <i style={{ width: `${pct}%` }} />
-            </div>
-            <div className="jl-km">{pct}% Caseload cap</div>
-          </div>
-          <div className="jl-kpi">
-            <div className="jl-kl">
-              <Icon name="scales" size={12} /> COURT DATES
-            </div>
-            <div className="jl-kv">
-              <b className="jl-orange">2</b> Imminent
-            </div>
-            <div className="jl-km">28 Apr: Motion Court</div>
-            <div className="jl-km">12 May: Arbitration</div>
-          </div>
-          <div className="jl-kpi">
-            <div className="jl-kl">
-              <Icon name="file" size={12} /> OPEN TASKS
-            </div>
-            <div className="jl-kv">
-              <b>9</b> <span className="jl-orange">1 Due 24h</span>
-            </div>
-            <div className="jl-km">Across 4 matters</div>
-            <div className="jl-km">3 Affidavits ready</div>
-          </div>
-          <div className="jl-kpi">
-            <div className="jl-kl">
-              <Icon name="clock" size={12} /> BILLED MTD
-            </div>
-            <div className="jl-kv">
-              <b>42.5</b> Hours
-            </div>
-            <div className="jl-km">Target: 60 hrs</div>
-            <div className="jl-km">Avg R 5,200/hr</div>
-          </div>
-        </div>
-      </section>
-      )}
       <div className="jl-grid">
         {/* Left: my assigned cases */}
         <div>
@@ -662,15 +560,15 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
             <div className="jl-hd">
               <div>
                 <h2 className="jl-h2">My Assigned Cases</h2>
-                <div className="jl-muted">Active judicial &amp; advisory dockets</div>
+                <div className="jl-muted">Cases assigned to you</div>
               </div>
-              <span className="jl-total">{CASES.length} Total</span>
+              <span className="jl-total">{cases.length} Total</span>
             </div>
 
             <div className="jl-csearch">
               <Icon name="search" size={14} />
               <input
-                placeholder="Search docket, case ID, or client..."
+                placeholder="Search case number, title or type..."
                 aria-label="Search my cases"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -678,39 +576,44 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
             </div>
 
             <div className="jl-chips" role="group" aria-label="Filter cases by status">
-              {CASE_FILTERS.map((f) => (
+              {statuses.map((f) => (
                 <button
                   key={f}
                   type="button"
                   className={`jl-chip${filter === f ? ' on' : ''}`}
                   onClick={() => setFilter(f)}
                 >
-                  {f} ({counts[f]})
+                  {f} ({countFor(f)})
                 </button>
               ))}
             </div>
 
             <div className="jl-list">
-              {visible.length === 0 && <div className="jl-empty">No dockets match your search.</div>}
+              {cases.length === 0 && (
+                <div className="jl-empty">No cases have been assigned to you yet.</div>
+              )}
+              {cases.length > 0 && visible.length === 0 && (
+                <div className="jl-empty">No cases match your search.</div>
+              )}
               {visible.map((c) => (
                 <button
                   key={c.id}
                   type="button"
-                  className={`jl-ci${c.id === selected.id ? ' on' : ''}`}
+                  className={`jl-ci${selected && c.id === selected.id ? ' on' : ''}`}
                   onClick={() => setSelectedId(c.id)}
                 >
                   <div className="jl-ci1">
-                    <span className="jl-ref">{c.ref}</span>
+                    <span className="jl-ref">{c.caseNumber}</span>
                     <span className="jl-tag">{c.type}</span>
-                    <StatusPill label={c.label} className="jl-ml" />
+                    <CaseStatusPill label={c.status} className="jl-ml" />
                   </div>
                   <div className="jl-ci2">{c.title}</div>
                   <div className="jl-ci3">
                     <span>
-                      <Icon name={c.clientIcon} size={12} /> {c.clientLabel}
+                      <Icon name="user" size={12} /> {c.clientNumber || 'Client'}
                     </span>
                     <span>
-                      <Icon name={c.meta.icon} size={12} /> {c.meta.text}
+                      <Icon name="calendar" size={12} /> {c.dateOpened ? formatDate(c.dateOpened) : '—'}
                     </span>
                   </div>
                 </button>
@@ -719,184 +622,102 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
           </section>
         </div>
 
-        {/* Right: selected case details */}
+        {/* Right: selected case */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <section className="jl-card">
-            <div className="jl-dh">
-              <div>
-                <div className="jl-dref">
-                  <span>{selected.ref}</span>
-                  <StatusPill label={selected.label} />
-                  {d.priority && <span className="jl-prio">! {d.priority}</span>}
-                </div>
-                <h2>{selected.title}</h2>
-                <div className="jl-muted">
-                  {d.court || 'High Court'} — Case No: {d.caseNo || '—'}
-                </div>
+          {!selected && (
+            <section className="jl-card">
+              <div className="jl-empty">
+                Select a case to see its details, the client and its tasks. Cases appear here once an
+                administrator assigns them to you.
               </div>
-              <div className="jl-btns">
-                <button type="button" className="jl-btn">
-                  <Icon name="download" size={14} /> Export Dossier
-                </button>
-                <Link to={ROUTES.tasks} className="jl-btn dark">
-                  <Icon name="plus" size={14} /> Log Activity
+            </section>
+          )}
+
+          {selected && (
+            <>
+              <section className="jl-card">
+                <div className="jl-dh">
+                  <div>
+                    <div className="jl-dref">
+                      <span>{selected.caseNumber}</span>
+                      <CaseStatusPill label={selected.status} />
+                    </div>
+                    <h2>{selected.title}</h2>
+                    <div className="jl-muted">
+                      {selected.type} — Opened {selected.dateOpened ? formatDate(selected.dateOpened) : '—'}
+                    </div>
+                  </div>
+                  <div className="jl-btns">
+                    <Link to={`/attorney/tasks/new?case=${encodeURIComponent(selected.caseNumber)}`} className="jl-btn dark">
+                      <Icon name="plus" size={14} /> Log Activity / Add Task
+                    </Link>
+                  </div>
+                </div>
+              </section>
+
+              <section className="jl-card">
+                <div className="jl-hd">
+                  <h2 className="jl-h2 ic">
+                    <Icon name="user" size={16} /> Client Information
+                  </h2>
+                  {selected.clientNumber && <span className="jl-total">{selected.clientNumber}</span>}
+                </div>
+                {client ? (
+                  <div className="jl-cl-i" style={{ marginTop: 12 }}>
+                    <div className="jl-cl-av">{initialsOf(`${client.firstName} ${client.surname}`)}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <b>
+                        {client.firstName} {client.surname}
+                      </b>
+                      <div className="jl-cl-l">
+                        <span>
+                          <Icon name="briefcase" size={12} /> ID / Passport:{' '}
+                          <span className="jl-mono">{client.idNumber || '—'}</span>
+                        </span>
+                        <span>
+                          <Icon name="user" size={12} /> {client.gender || '—'}
+                          {client.dateOfBirth ? ` • Born ${formatDate(client.dateOfBirth)}` : ''}
+                        </span>
+                        <span>
+                          <Icon name="mail" size={12} />
+                          {client.email ? <a href={`mailto:${client.email}`}>{client.email}</a> : '—'}
+                        </span>
+                        <span>
+                          <Icon name="phone" size={12} /> {client.phone || '—'}
+                        </span>
+                        <span style={{ whiteSpace: 'pre-line' }}>
+                          <Icon name="pin" size={12} /> {client.address || '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="jl-empty">Client details are not available for this case.</div>
+                )}
+              </section>
+
+              <section className="jl-card">
+                <h2 className="jl-h2 ic">
+                  <Icon name="scales" size={16} /> Case Summary
+                </h2>
+                <p className="jl-sum">{selected.description || 'No case summary has been captured for this case yet.'}</p>
+              </section>
+
+              <section className="jl-card">
+                <div className="jl-hd">
+                  <h2 className="jl-h2 ic">
+                    <Icon name="check" size={16} /> Legal Tasks &amp; Activity
+                  </h2>
+                  <span className="jl-total">{caseTasks.length} Tasks</span>
+                </div>
+                {error && <div className="jl-alert">{error}</div>}
+                <TaskTable rows={caseTasks} showCase={false} busyId={busyId} onStatus={onStatus} />
+                <Link to="/attorney/tasks" className="jl-more">
+                  Open all my tasks <Icon name="arrow" size={12} />
                 </Link>
-              </div>
-            </div>
-
-            <div className="jl-ms">
-              <div className="jl-ms-h">
-                <span>MATTER MILESTONES</span>
-                {d.note && <span className="jl-orange">{d.note}</span>}
-              </div>
-              <div className="jl-ms-bar">
-                {milestones.map((m, i) => (
-                  <i key={m} className={i + 1 < step ? 'd' : i + 1 === step ? 'c' : ''} />
-                ))}
-              </div>
-              <div className="jl-ms-lb">
-                {milestones.map((m, i) => (
-                  <span key={m} className={i + 1 === step ? 'c' : ''}>
-                    {m}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="jl-card">
-            <div className="jl-hd">
-              <h2 className="jl-h2 ic">
-                <Icon name="user" size={16} /> Primary Linked Client &amp; Retainer Profile
-              </h2>
-              <span className="jl-total">{client.id}</span>
-            </div>
-            <div className="jl-cl">
-              <div className="jl-cl-i">
-                <div className="jl-cl-av">{client.initials}</div>
-                <div style={{ minWidth: 0 }}>
-                  <b>{client.name}</b>
-                  <div className="jl-muted">({client.kind})</div>
-                  <div className="jl-orange" style={{ fontSize: 12, fontWeight: 600 }}>
-                    {client.company}
-                  </div>
-                  <div className="jl-cl-l">
-                    <span>
-                      <Icon name="briefcase" size={12} /> ID: <span className="jl-mono">{client.idNo}</span>
-                    </span>
-                    <span>
-                      <Icon name="mail" size={12} /> {client.email}
-                    </span>
-                    <span>
-                      <Icon name="phone" size={12} /> {client.phone}
-                    </span>
-                    <span>
-                      <Icon name="pin" size={12} /> {client.address}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="jl-ret">
-                <div className="jl-ret-h">
-                  <span>RETAINER VAULT BALANCE</span>
-                  <em>
-                    <Icon name="shield" size={11} /> FICA Active
-                  </em>
-                </div>
-                <div className="jl-ret-v jl-mono">{client.retainer}</div>
-                <div className="jl-muted">Trust Account: {client.trust}</div>
-                <div className="jl-btns">
-                  <a className="jl-btn" href={`mailto:${client.email}`}>
-                    <Icon name="mail" size={13} /> Contact
-                  </a>
-                  <button type="button" className="jl-btn dark">
-                    <Icon name="eye" size={13} /> Dossier
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="jl-card">
-            <h2 className="jl-h2 ic">
-              <Icon name="scales" size={16} /> Judicial Parameters &amp; Legal Brief
-            </h2>
-            <div className="jl-jp">
-              <div>
-                <div className="jl-lbl">COURT / SEAT</div>
-                <b>{d.seat || '—'}</b>
-                <div className="jl-muted">{d.seat2 || ''}</div>
-              </div>
-              <div>
-                <div className="jl-lbl">PRESIDING JURIST</div>
-                <b>{d.judge || '—'}</b>
-                <div className="jl-muted">{d.judge2 || ''}</div>
-              </div>
-              <div>
-                <div className="jl-lbl">OPENING DATE &amp; STATUS</div>
-                <b>{d.opened || '—'}</b>
-                <div className="jl-orange" style={{ fontSize: 12, fontWeight: 600 }}>
-                  {d.compliance || ''}
-                </div>
-              </div>
-            </div>
-            <div className="jl-lbl">CASE SUMMARY &amp; STRATEGIC CONTEXT</div>
-            <p className="jl-sum">{d.summary || 'No case summary has been captured for this docket yet.'}</p>
-          </section>
-
-          <div className="jl-two">
-            <section className="jl-card">
-              <div className="jl-hd">
-                <h2 className="jl-h2 ic">
-                  <Icon name="check" size={16} /> Legal Tasks Preview
-                </h2>
-                <span className="jl-total">{tasks.length} Tasks</span>
-              </div>
-              {tasks.length === 0 && <div className="jl-empty">No tasks logged for this docket yet.</div>}
-              {tasks.map((t) => (
-                <div key={t.title} className="jl-ti">
-                  <span className={`jl-tic ${t.tone === 'red' ? 'red' : t.tone === 'done' ? 'done' : ''}`}>
-                    <Icon name={t.icon} size={14} />
-                  </span>
-                  <div className={`jl-tt${t.tone === 'done' ? ' done' : ''}`}>
-                    <b>{t.title}</b>
-                    <small>{t.desc}</small>
-                  </div>
-                  <span className={`jl-due ${t.tone}`}>{t.due}</span>
-                </div>
-              ))}
-              <Link to={ROUTES.tasks} className="jl-more">
-                Open All 9 Counsel Tasks <Icon name="arrow" size={12} />
-              </Link>
-            </section>
-
-            <section className="jl-card">
-              <div className="jl-hd">
-                <h2 className="jl-h2 ic">
-                  <Icon name="folder" size={16} /> Docket Filings &amp; Records
-                </h2>
-                <span className="jl-ed jl-mono">e-Judiciary</span>
-              </div>
-              {filings.length === 0 && <div className="jl-empty">No filings recorded for this docket yet.</div>}
-              {filings.map((f) => (
-                <div key={f.name} className="jl-fi">
-                  <span className="jl-fic">
-                    <Icon name={f.icon} size={15} />
-                  </span>
-                  <div className="jl-tt">
-                    <b>{f.name}</b>
-                    <small>{f.meta}</small>
-                  </div>
-                  <button type="button" aria-label={f.action === 'eye' ? 'View filing' : 'Download filing'}>
-                    <Icon name={f.action} size={15} />
-                  </button>
-                </div>
-              ))}
-              <button type="button" className="jl-more">
-                Browse Full Electronic Index (14 Docs) <Icon name="arrow" size={12} />
-              </button>
-            </section>
-          </div>
+              </section>
+            </>
+          )}
         </div>
       </div>
     </Shell>
@@ -904,108 +725,111 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
 }
 
 /* ================= Page 2: Legal Tasks & Activities ================= */
-export function LegalTasksPage({ withShell = false }) {
-  const [filter, setFilter] = useState('All Tasks');
+export function LegalTasksPage() {
+  const { cases } = useData();
+  const myTasks = useMyTasks();
+  const { busyId, error, onStatus } = useStatusChange();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const active = TRACKER_FILTERS.find((f) => f.key === filter) || TRACKER_FILTERS[0];
-  const rows = TRACKER_TASKS.filter(active.match);
-  const done = TRACKER_TASKS.filter((t) => t.status === 'Completed').length;
-  const finalized = 4;
-  const total = 6;
-  const pct = Math.round((finalized / total) * 100);
+  const [message, setMessage] = useState(location.state?.message || '');
+  const [filter, setFilter] = useState('All');
+  const [caseFilter, setCaseFilter] = useState('All');
+  const [search, setSearch] = useState('');
+
+  // The form sends back a message once; clear it from the browser history state
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const term = search.trim().toLowerCase();
+  const rows = myTasks.filter((t) => {
+    if (filter !== 'All' && t.status !== filter) return false;
+    if (caseFilter !== 'All' && t.caseNumber !== caseFilter) return false;
+    if (term && !`${t.taskId} ${t.title} ${t.description} ${t.caseNumber}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+
+  const done = myTasks.filter((t) => t.status === 'Complete').length;
+  const pct = myTasks.length === 0 ? 0 : Math.round((done / myTasks.length) * 100);
+  const countFor = (s) => (s === 'All' ? myTasks.length : myTasks.filter((t) => t.status === s).length);
 
   return (
-    <Shell withShell={withShell}>
+    <Shell>
       <section className="jl-card">
         <div className="jl-ph">
           <div>
-            <div className="jl-lbl jl-orange">ACTIVE DOCKET EXECUTION • CAS-2024-0891 Vanderbilt Asset Restructuring</div>
-            <h1>{'Legal Activity & Milestone Tracker'}</h1>
+            <div className="jl-lbl jl-orange">LEGAL OPERATIONS • TASKS &amp; ACTIVITIES</div>
+            <h1>Legal Activity &amp; Task Tracker</h1>
           </div>
           <div className="jl-fin">
             <div>
-              <span>CASE FINALIZATION TRACK</span>
+              <span>TASK COMPLETION</span>
               <b>{pct}%</b>
             </div>
             <div className="jl-bar">
               <i style={{ width: `${pct}%` }} />
             </div>
             <div className="jl-muted">
-              {finalized} of {total} primary court milestones finalized
+              {done} of {myTasks.length} tasks completed
             </div>
           </div>
         </div>
 
-        <div className="jl-chips" style={{ marginTop: 16, marginBottom: 0 }} role="group" aria-label="Filter tasks by status">
-          {TRACKER_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              className={`jl-chip${filter === f.key ? ' on' : ''}`}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.key} ({TRACKER_TASKS.filter(f.match).length})
+        {message && (
+          <div className="jl-ok" role="status">
+            {message}
+            <button type="button" aria-label="Dismiss" onClick={() => setMessage('')}>
+              ×
             </button>
-          ))}
+          </div>
+        )}
+        {error && <div className="jl-alert">{error}</div>}
+
+        <div className="jl-bar-tools">
+          <div className="jl-chips" role="group" aria-label="Filter tasks by status">
+            {['All', ...TASK_STATUSES].map((s) => (
+              <button key={s} type="button" className={`jl-chip${filter === s ? ' on' : ''}`} onClick={() => setFilter(s)}>
+                {s === 'All' ? 'All Tasks' : s} ({countFor(s)})
+              </button>
+            ))}
+          </div>
+          <Link to="/attorney/tasks/new" className="jl-btn dark">
+            <Icon name="plus" size={14} /> Add Legal Task
+          </Link>
         </div>
 
-        <div className="jl-tw">
-          <table className="jl-table">
-            <thead>
-              <tr>
-                <th>TASK ID</th>
-                <th>MILESTONE / ACTION ITEM</th>
-                <th>TARGET / COMPLETION</th>
-                <th>SUPERVISING COUNSEL</th>
-                <th>STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="jl-empty">
-                    No tasks in this view.
-                  </td>
-                </tr>
-              )}
-              {rows.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <span className={`jl-tid jl-mono${t.status === 'Not Started' ? ' muted' : ''}`}>{t.id}</span>
-                  </td>
-                  <td>
-                    <b>{t.title}</b>
-                    <small>{t.desc}</small>
-                  </td>
-                  <td>
-                    {t.date}
-                    <small className={t.dateTone === 'ok' ? 'jl-tone-ok' : t.dateTone === 'warn' ? 'jl-tone-warn' : ''}>
-                      {t.dateNote}
-                    </small>
-                  </td>
-                  <td>
-                    {t.counsel}
-                    <small>{t.counselNote}</small>
-                  </td>
-                  <td>
-                    <span className={`jl-stat ${t.status.replace(' ', '').toLowerCase()}`}>{t.status.toUpperCase()}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="jl-filters">
+          <input
+            className="jl-field"
+            placeholder="Search by task or case..."
+            aria-label="Search tasks"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="jl-field" value={caseFilter} onChange={(e) => setCaseFilter(e.target.value)} aria-label="Filter by case">
+            <option value="All">All my cases</option>
+            {cases.map((c) => (
+              <option key={c.id} value={c.caseNumber}>
+                {c.caseNumber} - {c.title}
+              </option>
+            ))}
+          </select>
         </div>
+
+        <TaskTable rows={rows} showCase busyId={busyId} onStatus={onStatus} />
 
         <div className="jl-notice">
-          <b>Legal Notice &amp; Docket Integrity Protocol</b>
-          Legal task timelines, statuses, and docket filings are strictly maintained and verified by JusticeLaw Attorneys
-          in compliance with the Legal Practice Act (Act No. 28 of 2014) and the respective High Court Rules. {done} of{' '}
-          {TRACKER_TASKS.length} listed tasks are completed.
+          <b>Recording activity</b>
+          Use the status list on each task to record progress, <i>Edit</i> to change the details, or <i>Add Legal Task</i> to
+          log new work on one of your cases.
         </div>
       </section>
     </Shell>
   );
 }
+
 /* ================= Page 3: My Cases (same case workspace, no profile header) ================= */
 export function MyCasesPage(props) {
   return <AttorneyDashboard {...props} casesOnly />;

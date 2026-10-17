@@ -1,4 +1,4 @@
-﻿using JusticeLaw.API.Data;
+using JusticeLaw.API.Data;
 using JusticeLaw.API.Models;
 using JusticeLaw.API.Models.Entities;
 using Microsoft.AspNetCore.Http;
@@ -55,16 +55,31 @@ namespace JusticeLaw.API.Controllers
             return tasks.Where(t => false);
         }
 
+        // Admin can manage any task. An Attorney can only manage tasks on cases assigned to them.
+        private bool CanManageCase(Guid? caseId)
+        {
+            if (User.IsInRole("Admin")) return true;
+            if (!User.IsInRole("Attorney") || caseId == null) return false;
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return false;
+
+            return dbContext.Cases.Any(c => c.Id == caseId && c.Attorney != null && c.Attorney.UserId == userId);
+        }
+
         [HttpGet]
         public IActionResult GetAllTasks()
         {
             return Ok(VisibleTasks().ToList());
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Attorney")]
         [HttpPost]
         public IActionResult AddTask(AddTaskDto addTaskDto)
         {
+            if (!CanManageCase(addTaskDto.CaseId))
+                return StatusCode(StatusCodes.Status403Forbidden);
+
             var taskEntity = new LegalTask()
             {
                 TaskName = addTaskDto.TaskName,
@@ -91,13 +106,16 @@ namespace JusticeLaw.API.Controllers
             return Ok(task);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Attorney")]
         [HttpPut]
         [Route("{id:guid}")]
         public IActionResult UpdateTask(Guid id, UpdateTaskDto updateTaskDto)
         {
             var task = dbContext.LegalTasks.Find(id);
             if (task == null) return NotFound();
+
+            if (!CanManageCase(task.CaseId))
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             task.TaskName = updateTaskDto.TaskName;
             task.Description = updateTaskDto.Description;
