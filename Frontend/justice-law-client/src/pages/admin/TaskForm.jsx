@@ -108,7 +108,7 @@ export default function TaskForm() {
       <div className="panel">
         <div className="form-head dark">
           <div className="eyebrow">Legal tasks &amp; activities</div>
-          <h3>{editing ? `Edit ${editingId}` : 'Add Legal Task'}</h3>
+          <h3>{editing ? `Edit ${existing.taskId}` : 'Add Legal Task'}</h3>
           <p>Link the task to a case and an attorney, and set when it is due.</p>
         </div>
 
@@ -118,7 +118,7 @@ export default function TaskForm() {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Task ID (auto-generated)</Form.Label>
-                  <Form.Control value={editingId || nextTaskId(tasks)} readOnly style={{ fontWeight: 700 }} />
+                  <Form.Control value={editing ? existing.taskId : nextTaskId(tasks)} readOnly style={{ fontWeight: 700 }} />
                 </Form.Group>
               </Col>
               <Col md={6}>

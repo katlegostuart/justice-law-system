@@ -55,7 +55,7 @@ const CSS = `
 `;
 
 export default function Attorneys() {
-  const { attorneys: rows, refreshData } = useData();
+  const { attorneys: rows, cases, caseload, refreshData } = useData();
   const location = useLocation();
 
   const [query, setQuery] = useState('');
@@ -72,7 +72,7 @@ export default function Attorneys() {
       (a) =>
         (chip === 'All Disciplines' || a.specialization.startsWith(chip)) &&
         (tier === 'All Tiers' || a.tier === tier) &&
-        `${a.staffNo} ${a.name} ${a.surname} ${a.specialization}`.toLowerCase().includes(q)
+        `${a.staffNumber} ${a.name} ${a.surname} ${a.specialization}`.toLowerCase().includes(q)
     );
   }, [rows, query, chip, tier]);
 
@@ -87,7 +87,11 @@ export default function Attorneys() {
   /* ----- stats ----- */
   const seniorCount = rows.filter((a) => SENIOR_TIERS.includes(a.tier)).length;
   const disciplines = new Set(rows.map((a) => a.specialization)).size;
-  const available = rows.filter((a) => a.caseload / a.capacity < 0.6).length;
+  const available = rows.filter((a) => caseload(a.staffNumber) / (a.capacity || 8) < 0.6).length;
+
+  // An attorney who still has cases cannot be deleted (the database refuses it).
+  const casesOf = (attorney) => cases.filter((c) => c.attorneyId === attorney.id).length;
+  const deleteBlocked = !!toDelete && casesOf(toDelete) > 0;
 
   const confirmDelete = async () => {
     try {
@@ -103,7 +107,7 @@ export default function Attorneys() {
   const exportCsv = () => {
     const head = ['Staff Number', 'Name', 'Surname', 'Gender', 'Seniority', 'Specialization', 'Email', 'Phone', 'Capacity'];
     const lines = rows.map((a) =>
-      [a.staffNo, a.name, a.surname, a.gender, a.tier, a.specialization, a.email, a.phone, a.capacity]
+      [a.staffNumber, a.name, a.surname, a.gender, a.tier, a.specialization, a.email, a.phone, a.capacity]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(',')
     );
@@ -195,7 +199,7 @@ export default function Attorneys() {
             )}
             {shown.map((a) => (
               <tr key={a.id}>
-                <td><span className="am-sid">{a.staffNo}</span></td>
+                <td><span className="am-sid">{a.staffNumber}</span></td>
                 <td>
                   <div className="am-pr">
                     <span className="am-av">{a.name[0]}{a.surname[0]}</span>
@@ -230,13 +234,17 @@ export default function Attorneys() {
       </div>
 
       <Modal show={!!toDelete} onHide={() => setToDelete(null)} centered>
-        <Modal.Header closeButton><Modal.Title as="h2" className="h5">Remove attorney?</Modal.Title></Modal.Header>
+        <Modal.Header closeButton>
+          <Modal.Title as="h2" className="h5">{deleteBlocked ? 'Attorney cannot be removed' : 'Remove attorney?'}</Modal.Title>
+        </Modal.Header>
         <Modal.Body>
-          Remove Adv. {toDelete?.name} {toDelete?.surname} ({toDelete?.staffNo}) from the roster? This cannot be undone.
+          {deleteBlocked
+            ? <>Adv. {toDelete?.name} {toDelete?.surname} ({toDelete?.staffNumber}) still has {casesOf(toDelete)} case(s). Reassign those cases first.</>
+            : <>Remove Adv. {toDelete?.name} {toDelete?.surname} ({toDelete?.staffNumber}) from the roster? This cannot be undone.</>}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="link" className="text-secondary" onClick={() => setToDelete(null)}>Cancel</Button>
-          <Button variant="danger" onClick={confirmDelete}>Delete</Button>
+          <Button variant="link" className="text-secondary" onClick={() => setToDelete(null)}>{deleteBlocked ? 'Close' : 'Cancel'}</Button>
+          {!deleteBlocked && <Button variant="danger" onClick={confirmDelete}>Delete</Button>}
         </Modal.Footer>
       </Modal>
     </div>

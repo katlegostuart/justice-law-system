@@ -75,9 +75,9 @@ export function DataProvider({ children }) {
         email: a.email,
         phone: a.phoneNumber,
         specialization: a.specialization,
-        tier: 'Associate Advocate', // Default since API doesn't have it
-        capacity: 8,
-        caseload: 0 // Calculate dynamically later
+        tier: a.tier || 'Associate Advocate',
+        capacity: a.capacity || 8,
+        caseload: 0
       })));
 
       // MAP CASES
@@ -151,8 +151,19 @@ export function DataProvider({ children }) {
     caseload: (staffNumber) => {
       return cases.filter(c => c.attorneyNumber === staffNumber && c.status !== 'Closed').length;
     },
-    nextCaseNumber: (dateOpened) => `CAS-${new Date(dateOpened || Date.now()).getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-    nextClientNumber: () => `CLI-${Math.floor(1000 + Math.random() * 9000)}`
+    nextCaseNumber: (dateOpened) => {
+      const year = new Date(dateOpened || Date.now()).getFullYear();
+      const used = cases
+        .map((c) => (c.caseNumber || '').match(new RegExp(`^CAS-${year}-(\\d{1,4})$`)))
+        .filter(Boolean).map((m) => Number(m[1]));
+      return `CAS-${year}-${String(Math.max(0, ...used) + 1).padStart(3, '0')}`;
+    },
+    nextClientNumber: () => {
+      const used = clients
+        .map((c) => (c.clientNumber || '').match(/^CLI-(\d{1,4})$/))
+        .filter(Boolean).map((m) => Number(m[1]));
+      return `CLI-${String(Math.max(0, ...used) + 1).padStart(3, '0')}`;
+    },
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

@@ -50,4 +50,17 @@ export async function loginRequest(email, password) {
     return { token, role, email: userEmail, ...meRes.data };
 }
 
+// If the API says "401" the login has expired: clear it and go back to the login page
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isLoginCall = error.config?.url?.includes('/auth/login');
+    if (error.response?.status === 401 && !isLoginCall) {
+      localStorage.removeItem('user');
+      window.location.href = '/login'; // change this if your login page uses a different path
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;
