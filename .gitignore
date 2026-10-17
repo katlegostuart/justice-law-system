@@ -399,3 +399,4 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+/Backend/JusticeLaw.API/MasterSeed.sql

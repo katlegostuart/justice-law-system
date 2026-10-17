@@ -32,6 +32,11 @@ namespace JusticeLaw.API.Models.Entities
 
         public string? UserId { get; set; }
 
+        [StringLength(30)]
+        public string Tier { get; set; } = "Associate Advocate";
+
+        public int Capacity { get; set; } = 8;
+
         // One Attorney -> Many Cases
         [JsonIgnore]
         public ICollection<Case> Cases { get; set; } = new List<Case>();

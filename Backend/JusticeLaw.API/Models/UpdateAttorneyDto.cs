@@ -11,5 +11,7 @@ namespace JusticeLaw.API.Models
         [Required][EmailAddress] public required string Email { get; set; }
         [Required][Phone] public required string PhoneNumber { get; set; }
         [Required] public required string Specialization { get; set; }
+        public string Tier { get; set; } = "Associate Advocate";
+        [Range(1, 20)] public int Capacity { get; set; } = 8;
     }
 }
