@@ -8,7 +8,10 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace JusticeLaw.API.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    // Admins and attorneys can reach this controller.
+    // Only the client LIST is open to attorneys (needed to pick a client for a new case).
+    // Every other action is Admin only.
+    [Authorize(Roles = "Admin,Attorney")]
     [Route("api/[controller]")]
     [ApiController]
     public class ClientsController : ControllerBase
@@ -28,6 +31,7 @@ namespace JusticeLaw.API.Controllers
         }
 
         // POST: api/Clients
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         public IActionResult AddClient(AddClientDto addClientDto)
         {
@@ -51,6 +55,7 @@ namespace JusticeLaw.API.Controllers
         }
 
         // GET: api/Clients/{id}
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         [Route("{id:guid}")]
         public IActionResult GetClient(Guid id)
@@ -62,6 +67,7 @@ namespace JusticeLaw.API.Controllers
         }
 
         // PUT: api/Clients/{id}
+        [Authorize(Roles = "Admin")]
         [HttpPut]
         [Route("{id:guid}")]
         public IActionResult UpdateClient(Guid id, UpdateClientDto updateClientDto)
@@ -85,6 +91,7 @@ namespace JusticeLaw.API.Controllers
         }
 
         // DELETE: api/Clients/{id}
+        [Authorize(Roles = "Admin")]
         [HttpDelete]
         [Route("{id:guid}")]
         public IActionResult DeleteClient(Guid id)
@@ -99,6 +106,7 @@ namespace JusticeLaw.API.Controllers
         }
 
         // GET: api/Clients/search?query=smith
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         [Route("search")]
         public IActionResult SearchClients(string query)

@@ -111,7 +111,7 @@ namespace JusticeLaw.API.Controllers
         [Route("{id:guid}")]
         public IActionResult UpdateTask(Guid id, UpdateTaskDto updateTaskDto)
         {
-            var task = dbContext.LegalTasks.Find(id);
+            var task = VisibleTasks().FirstOrDefault(t => t.Id == id);
             if (task == null) return NotFound();
 
             // The new case must exist

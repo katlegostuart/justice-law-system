@@ -23,6 +23,7 @@ import { useData } from '../context/DataContext';
 import { formatDate } from '../components/ui';
 import { TASK_STATUSES, isOverdue } from '../services/taskConfig';
 import api from '../services/api';
+import { Modal, Form, Button, Alert } from 'react-bootstrap';
 
 /* ================= Icons (inline SVG, no extra package) ================= */
 const ICONS = {
@@ -442,9 +443,181 @@ function useStatusChange() {
   return { busyId, error, onStatus };
 }
 
+/* ================= New case window ================= */
+const NO_ID = '00000000-0000-0000-0000-000000000000';
+const CASE_STATUSES = ['Open', 'In Progress', 'Pending Hearing', 'Review'];
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+function CaseModal({ onHide, onSaved, startNumber }) {
+  const [clients, setClients] = useState([]);
+  const [caseTypes, setCaseTypes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({
+    caseNumber: startNumber,
+    caseName: '',
+    caseDescription: '',
+    dateOpened: todayStr(),
+    caseStatus: 'Open',
+    caseTypeId: '',
+    clientId: '',
+  });
+  const [otherType, setOtherType] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Load the client and case type lists straight from the API
+  useEffect(() => {
+    let alive = true;
+    Promise.allSettled([api.get('/Clients'), api.get('/CaseTypes')]).then(([c, t]) => {
+      if (!alive) return;
+      const cl = c.status === 'fulfilled' && Array.isArray(c.value.data) ? c.value.data : [];
+      const ty = t.status === 'fulfilled' && Array.isArray(t.value.data) ? t.value.data : [];
+      setClients(cl);
+      setCaseTypes(ty);
+      setForm((f) => ({ ...f, clientId: cl[0] ? cl[0].id : '', caseTypeId: ty[0] ? ty[0].id : '' }));
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+  const selectedType = caseTypes.find((t) => t.id === form.caseTypeId);
+  const isOther = !!selectedType && selectedType.name === 'Other';
+  const missingLists = !loading && (clients.length === 0 || caseTypes.length === 0);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!form.caseNumber.trim() || !form.caseName.trim() || !form.clientId || !form.caseTypeId || !form.dateOpened) {
+      setError('Case number, case name, client, case type and date opened are required.');
+      return;
+    }
+    if (isOther && !otherType.trim()) {
+      setError('Please say what the other case type is.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.post('/Cases', {
+        caseNumber: form.caseNumber.trim(),
+        caseName: form.caseName.trim(),
+        caseDescription: (isOther ? `[Other: ${otherType.trim()}] ` : '') + form.caseDescription.trim(),
+        dateOpened: form.dateOpened,
+        caseStatus: form.caseStatus,
+        caseTypeId: form.caseTypeId,
+        clientId: form.clientId,
+        attorneyId: NO_ID, // the API assigns the logged-in attorney
+      });
+      await onSaved(`Case ${(res.data && res.data.caseNumber) || form.caseNumber} was created and saved.`);
+      onHide();
+    } catch (err) {
+      const d = err.response && err.response.data;
+      setError(
+        (d && (d.title || d.message)) ||
+          `Could not save the case (error ${err.response ? err.response.status : 'no connection'}).`
+      );
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal show onHide={onHide} centered>
+      <Form onSubmit={save}>
+        <Modal.Header closeButton>
+          <Modal.Title>New Case</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {error && <Alert variant="danger">{error}</Alert>}
+          {loading && <Alert variant="light">Loading clients and case types...</Alert>}
+          {missingLists && (
+            <Alert variant="warning">
+              No clients or case types are available yet. Ask the administrator to add a client first.
+            </Alert>
+          )}
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case number</Form.Label>
+            <Form.Control value={form.caseNumber} onChange={set('caseNumber')} />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case name</Form.Label>
+            <Form.Control value={form.caseName} onChange={set('caseName')} placeholder="e.g. State v. Mokoena" />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Client</Form.Label>
+            <Form.Select value={form.clientId} onChange={set('clientId')}>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.clientNumber} — {c.firstName} {c.surname}
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case type</Form.Label>
+            <Form.Select value={form.caseTypeId} onChange={set('caseTypeId')}>
+              {caseTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Form.Select>
+            {isOther && (
+              <Form.Control
+                className="mt-2"
+                placeholder="Specify the other case type"
+                value={otherType}
+                onChange={(e) => setOtherType(e.target.value)}
+              />
+            )}
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Description</Form.Label>
+            <Form.Control as="textarea" rows={3} value={form.caseDescription} onChange={set('caseDescription')} />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Date opened</Form.Label>
+            <Form.Control type="date" value={form.dateOpened} onChange={set('dateOpened')} />
+          </Form.Group>
+
+          <Form.Group>
+            <Form.Label>Status</Form.Label>
+            <Form.Select value={form.caseStatus} onChange={set('caseStatus')}>
+              {CASE_STATUSES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={onHide} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="dark" type="submit" disabled={saving || loading || missingLists}>
+            {saving ? 'Saving...' : 'Create case'}
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
 /* ================= Page 1: Attorney dashboard ================= */
 export default function AttorneyDashboard({ casesOnly = false }) {
-  const { cases, getClient, maxCaseload } = useData();
+  const { cases, getClient, maxCaseload, refreshData, nextCaseNumber } = useData();
+  const [showNewCase, setShowNewCase] = useState(false);
+  const [notice, setNotice] = useState('');
+  const startNumber =
+    typeof nextCaseNumber === 'function'
+      ? nextCaseNumber()
+      : `CASE-${new Date().getFullYear()}-${String(cases.length + 1).padStart(3, '0')}`;
   const profile = useAttorneyProfile();
   const myTasks = useMyTasks();
   const { busyId, error, onStatus } = useStatusChange();
@@ -480,6 +653,24 @@ export default function AttorneyDashboard({ casesOnly = false }) {
 
   return (
     <Shell>
+      {notice && (
+        <div className="jl-ok" role="status">
+          {notice}
+          <button type="button" aria-label="Dismiss" onClick={() => setNotice('')}>
+            ×
+          </button>
+        </div>
+      )}
+      {showNewCase && (
+        <CaseModal
+          startNumber={startNumber}
+          onHide={() => setShowNewCase(false)}
+          onSaved={async (message) => {
+            await refreshData();
+            setNotice(message);
+          }}
+        />
+      )}
       {casesOnly ? (
         <div className="jl-ph">
           <div>
@@ -562,7 +753,12 @@ export default function AttorneyDashboard({ casesOnly = false }) {
                 <h2 className="jl-h2">My Assigned Cases</h2>
                 <div className="jl-muted">Cases assigned to you</div>
               </div>
-              <span className="jl-total">{cases.length} Total</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span className="jl-total">{cases.length} Total</span>
+                <button type="button" className="jl-btn dark sm" onClick={() => setShowNewCase(true)}>
+                  <Icon name="plus" size={13} /> New Case
+                </button>
+              </div>
             </div>
 
             <div className="jl-csearch">
