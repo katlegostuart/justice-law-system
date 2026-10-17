@@ -31,7 +31,6 @@ export default function Layout() {
               <small>Law Firm Management Portal</small>
             </div>
             <div className="topbar-right">
-              <span className="role-pill">{roleTitle[user.role] || user.role}</span>
               <div className="user-chip">
                 <div className="user-meta">
                   <strong>{user.name}</strong>

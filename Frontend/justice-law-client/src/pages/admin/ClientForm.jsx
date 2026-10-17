@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Row, Col, Button, Form, Alert } from 'react-bootstrap';
 import Icon from '../../components/Icon';
@@ -7,51 +7,79 @@ import { useData } from '../../context/DataContext';
 import api from '../../services/api';
 
 const GENDERS = ['Male', 'Female', 'Other'];
-const emptyForm = {
+const emptyForm = () => ({
   firstName: '', surname: '', gender: '', dateOfBirth: '',
   idNumber: '', email: '', phone: '', address: '',
-};
+});
 
-function validate(form, clients, editingNumber) {
+const formFrom = (c) => ({
+  firstName: c.firstName || '',
+  surname: c.surname || '',
+  gender: c.gender || '',
+  dateOfBirth: c.dateOfBirth || '',
+  idNumber: c.idNumber || '',
+  email: c.email || '',
+  phone: c.phone || '',
+  address: c.address || '',
+});
+
+function validate(form, clients, editingId) {
   const errors = {};
   if (!form.firstName.trim()) errors.firstName = 'First name is required';
+  else if (form.firstName.trim().length > 50) errors.firstName = 'First name must be 50 characters or fewer';
   if (!form.surname.trim()) errors.surname = 'Surname is required';
+  else if (form.surname.trim().length > 50) errors.surname = 'Surname must be 50 characters or fewer';
   if (!form.gender) errors.gender = 'Please select a gender';
   if (!form.dateOfBirth) errors.dateOfBirth = 'Date of birth is required';
   else if (new Date(form.dateOfBirth) > new Date()) errors.dateOfBirth = 'Date of birth cannot be in the future';
-  if (!form.idNumber.trim()) errors.idNumber = 'ID or passport number is required';
-  else if (clients.some((c) => c.clientNumber !== editingNumber && c.idNumber.replace(/\s/g, '') === form.idNumber.replace(/\s/g, ''))) {
+  const idNumber = form.idNumber.replace(/\s/g, '');
+  if (!idNumber) errors.idNumber = 'ID or passport number is required';
+  else if (idNumber.length > 20) errors.idNumber = 'ID or passport number must be 20 characters or fewer';
+  // Skip the client being edited (compare by id), otherwise a client "duplicates" themselves.
+  else if (clients.some((c) => c.id !== editingId && (c.idNumber || '').replace(/\s/g, '') === idNumber)) {
     errors.idNumber = 'A client with this ID / passport number already exists';
   }
   if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Enter a valid email address';
+  else if (form.email.length > 100) errors.email = 'Email must be 100 characters or fewer';
   if (!/^\+?[0-9 ()-]{9,15}$/.test(form.phone)) errors.phone = 'Enter a valid phone number';
   if (!form.address.trim()) errors.address = 'Address is required';
+  else if (form.address.length > 200) errors.address = 'Address must be 200 characters or fewer';
   return errors;
 }
 
-// /admin/clients/new            -> register a new client
-// /admin/clients/CLI-4029/edit  -> edit an existing client
+// /admin/clients/new           -> register a new client
+// /admin/clients/edit/:id      -> edit an existing client (:id is the client's GUID)
 export default function ClientForm() {
-  const { id: editingNumber } = useParams();
+  const { id: editingId } = useParams();
   const navigate = useNavigate();
-  const { clients, nextClientNumber } = useData();
+  const { clients, nextClientNumber, refreshData } = useData();
 
-  const existing = editingNumber ? clients.find((c) => c.id === editingNumber) : null;
+  const existing = editingId ? clients.find((c) => c.id === editingId) : null;
 
-  const [form, setForm] = useState(() => {
-    if (!existing) return emptyForm;
-    const fields = { ...existing };
-    delete fields.clientNumber;
-    return fields;
-  });
+  const [form, setForm] = useState(() => (existing ? formFrom(existing) : emptyForm()));
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadedId, setLoadedId] = useState(existing ? existing.id : null);
+  // Worked out ONCE when the page opens, so the number you see is the number that is saved.
+  const [generatedNumber] = useState(() => nextClientNumber());
+
+  // If the page is refreshed on an edit URL, the client arrives a moment later: fill the form then.
+  useEffect(() => {
+    if (existing && loadedId !== existing.id) {
+      setForm(formFrom(existing));
+      setLoadedId(existing.id);
+    }
+  }, [existing, loadedId]);
 
   const goBack = (state) => navigate('/admin/clients', { state });
 
-  if (editingNumber && !existing) {
+  if (editingId && !existing) {
     return (
       <div className="form-page-wrap">
-        <Alert variant="warning">Client {editingNumber} was not found.</Alert>
+        <Alert variant="warning">
+          We could not find this client. If the page has just loaded, go back to the client list and try again.
+        </Alert>
         <Button variant="primary" onClick={() => goBack()}>Back to clients</Button>
       </div>
     );
@@ -60,37 +88,40 @@ export default function ClientForm() {
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  const found = validate(form, clients, editingNumber);
-  setErrors(found);
-  if (Object.keys(found).length > 0) return;
+    e.preventDefault();
+    const found = validate(form, clients, editingId);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
 
-  // Map UI fields to API DTO fields
-  const payload = {
-    clientNumber: form.clientNumber || `CLI-${Date.now()}`, // Auto-generate if new
-    name: form.firstName,
-    surname: form.surname,
-    gender: form.gender,
-    dateOfBirth: new Date(form.dateOfBirth).toISOString(),
-    homeAddress: form.address,
-    email: form.email,
-    phoneNumber: form.phone,
-    idPassportNumber: form.idNumber
-  };
+    // Map UI fields to API fields. An existing client KEEPS its client number.
+    const payload = {
+      clientNumber: existing ? existing.clientNumber : generatedNumber,
+      name: form.firstName.trim(),
+      surname: form.surname.trim(),
+      gender: form.gender,
+      dateOfBirth: new Date(form.dateOfBirth).toISOString(),
+      homeAddress: form.address.trim(),
+      email: form.email.trim(),
+      phoneNumber: form.phone.trim(),
+      idPassportNumber: form.idNumber.trim(),
+    };
 
-  try {
-    if (editingNumber) {
-      await api.put(`/Clients/${existing.id}`, payload);
-      goBack({ message: `Client updated.` });
-    } else {
-      await api.post('/Clients', payload);
-      goBack({ message: `Client registered.` });
+    setSaving(true);
+    setSubmitError('');
+    try {
+      if (existing) {
+        await api.put(`/Clients/${existing.id}`, payload);
+      } else {
+        await api.post('/Clients', payload);
+      }
+      await refreshData(); // replaces the old window.location.reload()
+      goBack({ message: existing ? 'Client updated.' : 'Client registered.' });
+    } catch (err) {
+      const detail = err.response?.data;
+      setSubmitError(`Error saving client: ${typeof detail === 'string' && detail ? detail : err.message}`);
+      setSaving(false);
     }
-    window.location.reload(); // Refresh data
-  } catch (err) {
-    alert("Error saving client: " + err.message);
-  }
-};
+  };
 
   const field = (name, label, type = 'text', extra = {}) => (
     <Form.Group>
@@ -100,18 +131,22 @@ export default function ClientForm() {
     </Form.Group>
   );
 
+  const shownNumber = existing ? existing.clientNumber : generatedNumber;
+
   return (
     <div className="form-page-wrap">
       <button type="button" className="back-link" onClick={() => goBack()}>
         <Icon name="chevronLeft" size={16} /> Back to clients
       </button>
 
-      <PageHeader eyebrow="Entity entry portal" title={editingNumber ? `Edit Client ${editingNumber}` : 'Register New Client'}>
-        <span className="auto-badge">{editingNumber || nextClientNumber()} {editingNumber ? '' : '(Auto)'}</span>
+      <PageHeader eyebrow="Entity entry portal" title={existing ? `Edit Client ${existing.clientNumber}` : 'Register New Client'}>
+        <span className="auto-badge">{shownNumber} {existing ? '' : '(Auto)'}</span>
       </PageHeader>
 
       <div className="panel">
         <div className="form-body">
+          {submitError && <Alert variant="danger">{submitError}</Alert>}
+
           <Form onSubmit={handleSubmit} noValidate>
             <Row className="g-3">
               <Col md={6}>{field('firstName', 'First name', 'text', { placeholder: 'e.g. Eleanor' })}</Col>
@@ -152,7 +187,9 @@ export default function ClientForm() {
 
             <div className="form-actions">
               <Button variant="outline-secondary" onClick={() => goBack()}>Cancel</Button>
-              <Button type="submit" variant="primary">{editingNumber ? 'Save changes' : 'Save Client Record'}</Button>
+              <Button type="submit" variant="primary" disabled={saving}>
+                {saving ? 'Saving...' : existing ? 'Save changes' : 'Save Client Record'}
+              </Button>
             </div>
           </Form>
         </div>

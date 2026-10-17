@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Form, Button } from 'react-bootstrap';
 import { useData } from '../../context/DataContext';
@@ -36,25 +36,43 @@ const CSS = `
 .am-note{background:#f1f6ff;border:1px solid #dbe6fb;border-radius:8px;padding:10px 12px;font-size:12px;color:#475569;margin-top:16px}
 `;
 
-const emptyForm = (staffNo) => ({
-  id: null, staffNo, name: '', surname: '', gender: '', tier: 'Associate Advocate',
+// Next free staff number, e.g. STF-109 (the unique index rejects duplicates).
+const nextStaffNumber = (attorneys) => {
+  const used = attorneys
+    .map((a) => (a.staffNumber || '').match(/^STF-(\d{1,4})$/))
+    .filter(Boolean)
+    .map((m) => Number(m[1]));
+  return `STF-${Math.max(100, ...used) + 1}`;
+};
+
+const formFrom = (a) => ({ ...a, capacity: String(a.capacity || 8) });
+
+const emptyForm = (staffNumber) => ({
+  id: null, staffNumber, name: '', surname: '', gender: '', tier: 'Associate Advocate',
   specialization: '', email: '', phone: '', capacity: '8',
 });
 
 export default function AttorneyForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { attorneys } = useData(); // swapped to useData
+  const { attorneys, refreshData } = useData();
 
   const existing = id ? attorneys.find((r) => String(r.id) === id) : null;
   const editing = !!id;
 
   const [form, setForm] = useState(() =>
-    existing 
-      ? { ...existing, capacity: String(existing.capacity) } 
-      : emptyForm(`STF-${Math.floor(1000 + Math.random() * 9000)}`)
+    existing ? formFrom(existing) : emptyForm(nextStaffNumber(attorneys))
   );
   const [errors, setErrors] = useState({});
+  const [loadedId, setLoadedId] = useState(existing ? existing.id : null);
+
+  // If the page is refreshed on an edit URL, the attorney arrives a moment later: fill the form then.
+  useEffect(() => {
+    if (existing && loadedId !== existing.id) {
+      setForm(formFrom(existing));
+      setLoadedId(existing.id);
+    }
+  }, [existing, loadedId]);
 
   const setField = (k, v) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -94,25 +112,30 @@ export default function AttorneyForm() {
   if (Object.keys(e).length) return;
 
   const payload = {
-    staffNumber: form.staffNo,
+    staffNumber: form.staffNumber,
     name: form.name.trim(),
     surname: form.surname.trim(),
     gender: form.gender,
     email: form.email.trim(),
     phoneNumber: form.phone.trim(),
-    specialization: form.specialization
+    specialization: form.specialization,
+    tier: form.tier,
+    capacity: Number(form.capacity)
   };
 
   try {
     if (editing) {
       await api.put(`/Attorneys/${existing.id}`, payload);
+      await refreshData(); // so the directory shows the change straight away
       navigate(LIST_PATH, { state: { notice: `${payload.name} was updated.` } });
     } else {
       await api.post('/Attorneys', payload);
+      await refreshData(); // so the directory shows the new attorney straight away
       navigate(LIST_PATH, { state: { notice: `${payload.name} was added to the roster.` } });
     }
   } catch (err) {
-    alert("Error saving attorney: " + err.message);
+    const detail = err.response?.data;
+    alert("Error saving attorney: " + (typeof detail === 'string' && detail ? detail : err.message));
   }
 };
 
@@ -135,7 +158,7 @@ export default function AttorneyForm() {
         <div className="row g-3">
           <Form.Group className="col-md-6">
             <Form.Label>Staff Identification Number <span className="am-muted">(Auto-Generated)</span></Form.Label>
-            <Form.Control value={form.staffNo} readOnly />
+            <Form.Control value={form.staffNumber} readOnly />
           </Form.Group>
           <div className="col-md-6" />
 

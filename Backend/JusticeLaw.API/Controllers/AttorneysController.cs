@@ -1,9 +1,10 @@
 ﻿using JusticeLaw.API.Data;
 using JusticeLaw.API.Models;
 using JusticeLaw.API.Models.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
+using System.Timers;
 
 namespace JusticeLaw.API.Controllers
 {
@@ -36,7 +37,9 @@ namespace JusticeLaw.API.Controllers
                 Gender = addAttorneyDto.Gender,
                 Email = addAttorneyDto.Email,
                 PhoneNumber = addAttorneyDto.PhoneNumber,
-                Specialization = addAttorneyDto.Specialization
+                Specialization = addAttorneyDto.Specialization,
+                Tier = addAttorneyDto.Tier,          // in UpdateAttorney use updateAttorneyDto.Tier
+                Capacity = addAttorneyDto.Capacity,  // in UpdateAttorney use updateAttorneyDto.Capacity
             };
 
             dbContext.Attorneys.Add(attorneyEntity);
@@ -69,6 +72,8 @@ namespace JusticeLaw.API.Controllers
             attorney.Email = updateAttorneyDto.Email;
             attorney.PhoneNumber = updateAttorneyDto.PhoneNumber;
             attorney.Specialization = updateAttorneyDto.Specialization;
+            attorney.Tier = updateAttorneyDto.Tier;
+            attorney.Capacity = updateAttorneyDto.Capacity;
 
             dbContext.SaveChanges();
 

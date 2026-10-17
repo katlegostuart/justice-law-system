@@ -1,120 +1,32 @@
 /*
-  AttorneyDashboard.jsx
+  AttorneyDashboard.jsx  (live data version)
 
   Exports:
-    default -> AttorneyDashboard (my cases, client, case details)
-    named   -> LegalTasksPage    (Legal Activity & Milestone Tracker)
-    named   -> MyCasesPage       (cases only, no profile header)
+    default -> AttorneyDashboard (my assigned cases, client information, tasks per case)
+    named   -> LegalTasksPage    (all my legal tasks: add, edit, record progress)
+    named   -> MyCasesPage       (same case workspace without the profile header)
 
   Routes (App.jsx):
-    /attorney        -> AttorneyDashboard
-    /attorney/tasks  -> LegalTasksPage
+    /attorney             -> AttorneyDashboard
+    /attorney/cases       -> MyCasesPage
+    /attorney/tasks       -> LegalTasksPage
+    /attorney/tasks/new   -> AttorneyTaskForm  (create a task)
+    /attorney/tasks/edit/:id -> AttorneyTaskForm (edit a task)
 
-  Data comes from the database through DataContext. The API already returns only
-  the cases and tasks that belong to the logged-in attorney.
+  Data comes from DataContext, which loads it from the API. The backend only
+  returns the cases and tasks that belong to the logged-in attorney.
 */
-import { useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { formatDate } from '../components/ui';
+import { TASK_STATUSES, isOverdue } from '../services/taskConfig';
 import api from '../services/api';
-import { Modal, Form, Button, Alert } from 'react-bootstrap';
-
-/* ================= Routes and navigation ================= */
-const ROUTES = {
-  dashboard: '/attorney',
-  clients: '/attorney/clients',
-  cases: '/attorney/cases',
-  tasks: '/attorney/tasks',
-  research: '/attorney/settings',
-};
-
-/* Attorney-only navigation */
-const NAV = [
-  { label: 'Overview / Dashboard', icon: 'grid', to: ROUTES.dashboard },
-  { label: 'Clients Management', icon: 'users', to: ROUTES.clients },
-  { label: 'Cases & Dockets', icon: 'folder', to: ROUTES.cases },
-  { label: 'Legal Tasks & Activities', icon: 'check', to: ROUTES.tasks },
-  { label: 'Research & Settings', icon: 'book', to: ROUTES.research },
-];
-
-/* ================= Real data (replaces the old mock data) ================= */
-const isDone = (s) => /complete|done|closed/i.test(s || '');
-const taskState = (s) =>
-  isDone(s) ? 'Completed' : /in\s*progress|ongoing|active/i.test(s || '') ? 'In Progress' : 'Not Started';
-const initialsOf = (name) =>
-  (name || '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
-const todayStr = () => new Date().toISOString().split('T')[0];
-const prettyDate = (d) => {
-  if (!d) return '—';
-  const x = new Date(d);
-  return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-
-/* The logged-in attorney, their cases and their tasks, all from the database */
-function useMine() {
-  const { user } = useAuth();
-  const { cases, tasks, clients, attorneys, maxCaseload } = useData();
-
-  return useMemo(() => {
-    const staffNumber = user?.staffNumber || '';
-    const name = user?.name || user?.email || 'Attorney';
-    const profile = attorneys.find((a) => a.staffNumber === staffNumber);
-
-    const myCases = cases
-      .filter((c) => !staffNumber || c.attorneyNumber === staffNumber)
-      .map((c) => {
-        const client = clients.find((cl) => cl.id === c.clientId || cl.clientNumber === c.clientNumber);
-        return {
-          id: c.id,
-          ref: c.caseNumber,
-          title: c.title,
-          type: c.type,
-          status: c.status || 'Open',
-          description: c.description,
-          dateOpened: c.dateOpened,
-          client,
-          clientLabel: client ? `${client.firstName} ${client.surname}`.trim() : 'Client not found',
-        };
-      });
-
-    const caseById = {};
-    myCases.forEach((c) => { caseById[c.id] = c; });
-
-    const myTasks = tasks
-      .filter((t) => caseById[t.caseId])
-      .map((t) => ({
-        ...t,
-        state: taskState(t.status),
-        overdue: !isDone(t.status) && !!t.dueDate && t.dueDate < todayStr(),
-        theCase: caseById[t.caseId],
-      }));
-
-    return {
-      me: {
-        name,
-        staffNumber,
-        initials: initialsOf(name),
-        email: user?.email || '',
-        specialization: profile?.specialization || '',
-      },
-      myCases,
-      myTasks,
-      max: maxCaseload || 8,
-    };
-  }, [user, cases, tasks, clients, attorneys, maxCaseload]);
-}
-
-
-const TRACKER_FILTERS = [
-  { key: 'All Tasks', match: () => true },
-  { key: 'In Progress', match: (t) => t.status === 'In Progress' },
-  { key: 'Completed', match: (t) => t.status === 'Completed' },
-  { key: 'Pending Schedule', match: (t) => t.status === 'Not Started' },
-];
 
 /* ================= Icons (inline SVG, no extra package) ================= */
 const ICONS = {
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
@@ -351,84 +263,89 @@ const CSS = `
 /* Responsive */
 @media (max-width:1100px){.jl-grid,.jl-two,.jl-cl{grid-template-columns:1fr}}
 @media (max-width:900px){.jl{flex-direction:column}.jl-side{width:auto;flex:none;height:auto;position:static}.jl-jp{grid-template-columns:1fr}}
+
+/* Live-data additions */
+.jl-st-closed{background:#e2e8f0;color:#475569}
+.jl-stat.complete{background:#dcfce7;color:#15803d}
+.jl-btn.sm{padding:5px 10px;font-size:11px}
+.jl-pick{border:1px solid #e2e8f0;border-radius:999px;padding:3px 8px;font:inherit;font-size:11px;font-weight:700;cursor:pointer;background:#f1f5f9;color:#475569}
+.jl-pick.inprogress{background:#fef3c7;color:#b45309;border-color:#fde68a}
+.jl-pick.complete{background:#dcfce7;color:#15803d;border-color:#bbf7d0}
+.jl-pick:disabled{opacity:.6;cursor:wait}
+.jl-alert{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px}
+.jl-ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+.jl-ok button{background:none;border:0;font-size:18px;line-height:1;cursor:pointer;color:inherit}
+.jl-bar-tools{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.jl-bar-tools .jl-chips{margin-bottom:0}
+.jl-filters{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.jl-field{border:1px solid #e2e8f0;background:#f8faff;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;min-width:200px;flex:1;max-width:340px}
+.jl-cl-l a{color:#1e3a8a}
 `;
 
-/* ================= Shared shell: sidebar + top bar ================= */
-function Shell({ withShell, children }) {
-  const { pathname } = useLocation();
-  const { me } = useMine();
+/* ================= Small helpers ================= */
+const initialsOf = (name) =>
+  (name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase() || 'A';
 
-  const isActive = (to) =>
-    to === ROUTES.dashboard
-      ? pathname === to || pathname === `${to}/`
-      : pathname.startsWith(to);
+const byDueDate = (a, b) => (a.dueDate || '').localeCompare(b.dueDate || '');
 
-  if (!withShell) {
-    return (
-      <>
-        <style>{CSS}</style>
-        <div className="jl">
-          <div className="jl-main">
-            <div className="jl-page">{children}</div>
-          </div>
-        </div>
-      </>
-    );
-  }
+const CASE_STATUS_CLASS = { 'In Progress': 'prog', 'Pending Hearing': 'pend', Review: 'rev', Open: 'open', Closed: 'closed' };
 
+function CaseStatusPill({ label, className = '' }) {
+  return (
+    <span className={`jl-st jl-st-${CASE_STATUS_CLASS[label] || 'open'} ${className}`}>
+      <i />
+      {label || 'Open'}
+    </span>
+  );
+}
+
+// The logged-in attorney: name and staff number come from the login, the rest from the API when available.
+function useAttorneyProfile() {
+  const { user } = useAuth();
+  const { attorneys, getAttorney } = useData();
+  const record = getAttorney(user?.staffNumber) || attorneys[0] || null;
+  const name = user?.name || (record ? `${record.name} ${record.surname}` : 'Attorney');
+  return {
+    name,
+    initials: initialsOf(name),
+    staffNumber: user?.staffNumber || record?.staffNumber || '',
+    specialization: record?.specialization || '',
+    email: user?.email || record?.email || '',
+  };
+}
+
+// Tasks that belong to the attorney's own cases, soonest due date first.
+function useMyTasks() {
+  const { cases, tasks } = useData();
+  return useMemo(() => {
+    const mine = new Set(cases.map((c) => c.caseNumber));
+    return tasks.filter((t) => mine.has(t.caseNumber)).sort(byDueDate);
+  }, [cases, tasks]);
+}
+
+// Records progress: sends the task back to the API with its new status.
+async function saveTaskStatus(task, status) {
+  await api.put(`/LegalTasks/${task.id}`, {
+    taskName: task.title,
+    description: task.description || 'No description',
+    dueDate: new Date(task.dueDate).toISOString(),
+    status,
+    caseId: task.caseId,
+  });
+}
+
+function Shell({ children }) {
   return (
     <>
       <style>{CSS}</style>
       <div className="jl">
-        <aside className="jl-side">
-          <div className="jl-logo">
-            <Icon name="scales" size={30} />
-            <div>
-              <b>JUSTICELAW</b>
-              <small>ATTORNEYS</small>
-            </div>
-          </div>
-          <div className="jl-sec">LEGAL OPERATIONS</div>
-          <nav className="jl-nav" aria-label="Attorney navigation">
-            {NAV.map((item) => (
-              <Link key={item.to} to={item.to} className={isActive(item.to) ? 'on' : ''}>
-                <Icon name={item.icon} size={16} />
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="jl-sidefoot">
-            <div>
-              <span>JURISDICTION</span>
-              <b>High Court</b>
-            </div>
-            <div>Docket Filing Sync: Active</div>
-          </div>
-        </aside>
-
         <div className="jl-main">
-          <header className="jl-top">
-            <div className="jl-gs">
-              <Icon name="search" size={15} />
-              <input placeholder="Search docket, clients, matters..." aria-label="Search docket, clients, matters" />
-            </div>
-            <div className="jl-topr">
-              <span className="jl-cp">
-                <i />
-                Attorney
-              </span>
-              <span className="jl-bell" aria-label="Notifications">
-                <Icon name="bell" size={18} />
-              </span>
-              <div className="jl-me">
-                <div>
-                  <b>{me.name}</b>
-                  <small>{me.staffNumber || 'Attorney'}</small>
-                </div>
-                <div className="jl-av">{me.initials}</div>
-              </div>
-            </div>
-          </header>
           <div className="jl-page">{children}</div>
         </div>
       </div>
@@ -436,258 +353,159 @@ function Shell({ withShell, children }) {
   );
 }
 
-/* ================= Small shared pieces ================= */
-const STATUS_CLASS = { 'In Progress': 'prog', 'Pending Hearing': 'pend', Review: 'rev', Open: 'open', Closed: 'rev', Completed: 'rev' };
-
-function StatusPill({ label, className = '' }) {
+/* Task table, used on the dashboard (one case) and on the tasks page (all cases) */
+function TaskTable({ rows, showCase, busyId, onStatus }) {
   return (
-    <span className={`jl-st jl-st-${STATUS_CLASS[label] || 'open'} ${className}`}>
-      <i />
-      {label}
-    </span>
+    <div className="jl-tw">
+      <table className="jl-table">
+        <thead>
+          <tr>
+            <th>TASK ID</th>
+            <th>TASK</th>
+            {showCase && <th>CASE</th>}
+            <th>DUE DATE</th>
+            <th>STATUS</th>
+            <th aria-label="Actions" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={showCase ? 6 : 5} className="jl-empty">
+                No tasks to show.
+              </td>
+            </tr>
+          )}
+          {rows.map((t) => (
+            <tr key={t.id}>
+              <td>
+                <span className="jl-tid jl-mono">{t.taskId}</span>
+              </td>
+              <td>
+                <b>{t.title}</b>
+                {t.description && <small>{t.description}</small>}
+              </td>
+              {showCase && <td>{t.caseNumber || '—'}</td>}
+              <td style={{ whiteSpace: 'nowrap' }}>
+                {t.dueDate ? formatDate(t.dueDate) : '—'}
+                {isOverdue(t) && <small className="jl-tone-warn">Overdue</small>}
+              </td>
+              <td>
+                <select
+                  className={`jl-pick ${t.status.replace(/\s/g, '').toLowerCase()}`}
+                  value={t.status}
+                  disabled={busyId === t.id}
+                  aria-label={`Status of ${t.taskId}`}
+                  onChange={(e) => onStatus(t, e.target.value)}
+                >
+                  {TASK_STATUSES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <Link className="jl-btn sm" to={`/attorney/tasks/edit/${t.id}`}>
+                  <Icon name="edit" size={13} /> Edit
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-/* ================= Page 1: Attorney dashboard ================= */
-/* ================= New case window ================= */
-const NO_ID = '00000000-0000-0000-0000-000000000000';
-const CASE_STATUSES = ['Open', 'In Progress', 'Pending Hearing', 'Review'];
-
-function CaseModal({ onHide, onSaved, clients, caseTypes, nextCaseNumber }) {
-  const [form, setForm] = useState({
-    caseNumber: nextCaseNumber(),
-    caseName: '',
-    caseDescription: '',
-    dateOpened: todayStr(),
-    caseStatus: 'Open',
-    caseTypeId: caseTypes[0] ? caseTypes[0].id : '',
-    clientId: clients[0] ? clients[0].id : '',
-  });
-  const [saving, setSaving] = useState(false);
+// Shared by both pages: change a task's status and refresh the data.
+function useStatusChange() {
+  const { refreshData } = useData();
+  const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState('');
-  const [otherType, setOtherType] = useState('');
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
-  const missingLists = clients.length === 0 || caseTypes.length === 0;
-  const selectedType = caseTypes.find((t) => t.id === form.caseTypeId);
-  const isOther = !!selectedType && selectedType.name === 'Other';
 
-  const save = async (e) => {
-    e.preventDefault();
+  const onStatus = async (task, status) => {
+    setBusyId(task.id);
     setError('');
-    if (!form.caseNumber.trim() || !form.caseName.trim() || !form.clientId || !form.caseTypeId || !form.dateOpened) {
-      setError('Case number, case name, client, case type and date opened are required.');
-      return;
-    }
-    if (isOther && !otherType.trim()) {
-      setError('Please say what the other case type is.');
-      return;
-    }
-    setSaving(true);
     try {
-      const res = await api.post('/Cases', {
-        caseNumber: form.caseNumber.trim(),
-        caseName: form.caseName.trim(),
-        caseDescription: (isOther ? `[Other: ${otherType.trim()}] ` : '') + form.caseDescription.trim(),
-        dateOpened: form.dateOpened,
-        caseStatus: form.caseStatus,
-        caseTypeId: form.caseTypeId,
-        clientId: form.clientId,
-        attorneyId: NO_ID, // the API assigns the logged-in attorney
-      });
-      await onSaved(`Case ${(res.data && res.data.caseNumber) || form.caseNumber} was created and saved.`);
-      onHide();
+      await saveTaskStatus(task, status);
+      await refreshData();
     } catch (err) {
-      const d = err.response && err.response.data;
       setError(
-        (d && (d.title || d.message)) ||
-          (err.response && err.response.status === 403
-            ? 'You are not allowed to create cases.'
-            : 'Could not save the case. Please try again.')
+        err.response?.status === 403
+          ? 'You can only update tasks on your own cases.'
+          : `Could not update the task: ${err.message}`
       );
-      setSaving(false);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  return (
-    <Modal show onHide={onHide} centered>
-      <Form onSubmit={save}>
-        <Modal.Header closeButton>
-          <Modal.Title>New Case</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {error && <Alert variant="danger">{error}</Alert>}
-          {missingLists && (
-            <Alert variant="warning">
-              No clients or case types are available to you yet. Ask the administrator to add them.
-            </Alert>
-          )}
-
-          <Form.Group className="mb-3">
-            <Form.Label>Case number</Form.Label>
-            <Form.Control value={form.caseNumber} onChange={set('caseNumber')} />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Case name</Form.Label>
-            <Form.Control value={form.caseName} onChange={set('caseName')} placeholder="e.g. Vanderbilt Asset Restructuring" />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Client</Form.Label>
-            <Form.Select value={form.clientId} onChange={set('clientId')}>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.clientNumber} — {c.firstName} {c.surname}
-                </option>
-              ))}
-            </Form.Select>
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Case type</Form.Label>
-            <Form.Select value={form.caseTypeId} onChange={set('caseTypeId')}>
-              {caseTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Form.Select>
-            {isOther && (
-              <Form.Control
-                className="mt-2"
-                placeholder="Specify the other case type"
-                value={otherType}
-                onChange={(e) => setOtherType(e.target.value)}
-              />
-            )}
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Description</Form.Label>
-            <Form.Control as="textarea" rows={3} value={form.caseDescription} onChange={set('caseDescription')} />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Date opened</Form.Label>
-            <Form.Control type="date" value={form.dateOpened} onChange={set('dateOpened')} />
-          </Form.Group>
-
-          <Form.Group>
-            <Form.Label>Status</Form.Label>
-            <Form.Select value={form.caseStatus} onChange={set('caseStatus')}>
-              {CASE_STATUSES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </Form.Select>
-          </Form.Group>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={onHide} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="dark" type="submit" disabled={saving || missingLists}>
-            {saving ? 'Saving...' : 'Create case'}
-          </Button>
-        </Modal.Footer>
-      </Form>
-    </Modal>
-  );
+  return { busyId, error, onStatus };
 }
 
-export default function AttorneyDashboard({ withShell = false, casesOnly = false }) {
-  const { me, myCases, myTasks, max } = useMine();
-  const { clients, caseTypes, refreshData, nextCaseNumber } = useData();
-  const [showNewCase, setShowNewCase] = useState(false);
-  const [notice, setNotice] = useState('');
+/* ================= Page 1: Attorney dashboard ================= */
+export default function AttorneyDashboard({ casesOnly = false }) {
+  const { cases, getClient, maxCaseload } = useData();
+  const profile = useAttorneyProfile();
+  const myTasks = useMyTasks();
+  const { busyId, error, onStatus } = useStatusChange();
+
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [selectedId, setSelectedId] = useState(null);
 
-  const filters = useMemo(() => ['All', ...new Set(myCases.map((c) => c.status))], [myCases]);
-
-  const counts = useMemo(() => {
-    const o = { All: myCases.length };
-    myCases.forEach((c) => { o[c.status] = (o[c.status] || 0) + 1; });
-    return o;
-  }, [myCases]);
+  const statuses = useMemo(
+    () => ['All', ...Array.from(new Set(cases.map((c) => c.status).filter(Boolean)))],
+    [cases]
+  );
+  const countFor = (s) => (s === 'All' ? cases.length : cases.filter((c) => c.status === s).length);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return myCases.filter(
+    return cases.filter(
       (c) =>
         (filter === 'All' || c.status === filter) &&
-        `${c.ref} ${c.title} ${c.clientLabel}`.toLowerCase().includes(q)
+        `${c.caseNumber} ${c.title} ${c.type}`.toLowerCase().includes(q)
     );
-  }, [myCases, query, filter]);
+  }, [cases, query, filter]);
 
-  const selected = myCases.find((c) => c.id === selectedId) || myCases[0] || null;
-  const client = selected ? selected.client : null;
-  const selTasks = selected ? myTasks.filter((t) => t.caseId === selected.id) : [];
-  const selDone = selTasks.filter((t) => t.state === 'Completed').length;
-  const selPct = selTasks.length ? Math.round((selDone / selTasks.length) * 100) : 0;
+  const selected = cases.find((c) => c.id === selectedId) || visible[0] || cases[0] || null;
+  const client = selected ? getClient(selected.clientNumber) || getClient(selected.clientId) : null;
+  const caseTasks = selected ? myTasks.filter((t) => t.caseNumber === selected.caseNumber) : [];
 
-  const active = myCases.filter((c) => !isDone(c.status)).length;
-  const pct = Math.min(100, Math.round((active / max) * 100));
-  const openTasks = myTasks.filter((t) => t.state !== 'Completed');
-  const overdue = myTasks.filter((t) => t.overdue).length;
-  const doneTasks = myTasks.length - openTasks.length;
-  const clientCount = new Set(myCases.map((c) => c.client && c.client.id).filter(Boolean)).size;
+  const activeCases = cases.filter((c) => c.status !== 'Closed').length;
+  const capacity = Math.min(100, Math.round((activeCases / maxCaseload) * 100));
+  const openTasks = myTasks.filter((t) => t.status !== 'Complete').length;
+  const overdueTasks = myTasks.filter(isOverdue).length;
+  const doneTasks = myTasks.filter((t) => t.status === 'Complete').length;
 
   return (
-    <Shell withShell={withShell}>
-      {notice && (
-        <Alert variant="success" dismissible onClose={() => setNotice('')} className="mb-0">
-          {notice}
-        </Alert>
-      )}
-
-      {showNewCase && (
-        <CaseModal
-          clients={clients}
-          caseTypes={caseTypes}
-          nextCaseNumber={nextCaseNumber}
-          onHide={() => setShowNewCase(false)}
-          onSaved={async (message) => {
-            await refreshData();
-            setNotice(message);
-          }}
-        />
-      )}
-
-      {casesOnly && (
+    <Shell>
+      {casesOnly ? (
         <div className="jl-ph">
           <div>
             <div className="jl-lbl jl-orange">LEGAL OPERATIONS • CASES &amp; DOCKETS</div>
             <h1>My Cases</h1>
           </div>
-          <span className="jl-total">{myCases.length} Total</span>
+          <span className="jl-total">{cases.length} Total</span>
         </div>
-      )}
-
-      {/* Profile header (dashboard only) */}
-      {!casesOnly && (
+      ) : (
         <section className="jl-prof">
           <div className="jl-prof-l">
-            <div className="jl-ava">{me.initials}</div>
+            <div className="jl-ava">{profile.initials}</div>
             <div>
               <h1>
-                {me.name}
-                {me.staffNumber && <span className="jl-idchip">ID #{me.staffNumber}</span>}
+                {profile.name}
+                {profile.staffNumber && <span className="jl-idchip">ID #{profile.staffNumber}</span>}
                 <span className="jl-role">Attorney</span>
               </h1>
-              <div className="jl-sub">{me.specialization || 'Attorney'}</div>
-              <div className="jl-sub2">
-                {me.email && (
+              {profile.specialization && <div className="jl-sub">{profile.specialization}</div>}
+              {profile.email && (
+                <div className="jl-sub2">
                   <span>
-                    <Icon name="mail" size={13} /> {me.email}
+                    <Icon name="mail" size={13} /> {profile.email}
                   </span>
-                )}
-                {me.specialization && (
-                  <span>
-                    <Icon name="scales" size={13} /> {me.specialization}
-                  </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -697,39 +515,39 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
                 <Icon name="briefcase" size={12} /> ACTIVE CASES
               </div>
               <div className="jl-kv">
-                <b>{active}</b> / {max} Max
+                <b>{activeCases}</b> / {maxCaseload} Max
               </div>
               <div className="jl-bar">
-                <i style={{ width: `${pct}%` }} />
+                <i style={{ width: `${capacity}%` }} />
               </div>
-              <div className="jl-km">{pct}% Caseload cap</div>
+              <div className="jl-km">{capacity}% Caseload cap</div>
             </div>
             <div className="jl-kpi">
               <div className="jl-kl">
                 <Icon name="file" size={12} /> OPEN TASKS
               </div>
               <div className="jl-kv">
-                <b>{openTasks.length}</b> {overdue > 0 && <span className="jl-orange">{overdue} overdue</span>}
+                <b>{openTasks}</b>
               </div>
-              <div className="jl-km">Across {new Set(openTasks.map((t) => t.caseId)).size} matters</div>
+              <div className="jl-km">Across {cases.length} cases</div>
             </div>
             <div className="jl-kpi">
               <div className="jl-kl">
-                <Icon name="check" size={12} /> COMPLETED TASKS
+                <Icon name="clock" size={12} /> OVERDUE
+              </div>
+              <div className="jl-kv">
+                <b className={overdueTasks > 0 ? 'jl-orange' : ''}>{overdueTasks}</b>
+              </div>
+              <div className="jl-km">{overdueTasks > 0 ? 'Past the due date' : 'Nothing overdue'}</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="checkcircle" size={12} /> COMPLETED
               </div>
               <div className="jl-kv">
                 <b>{doneTasks}</b> of {myTasks.length}
               </div>
-              <div className="jl-km">Finished so far</div>
-            </div>
-            <div className="jl-kpi">
-              <div className="jl-kl">
-                <Icon name="users" size={12} /> CLIENTS
-              </div>
-              <div className="jl-kv">
-                <b>{clientCount}</b> Linked
-              </div>
-              <div className="jl-km">From your assigned cases</div>
+              <div className="jl-km">Tasks finished</div>
             </div>
           </div>
         </section>
@@ -742,20 +560,15 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
             <div className="jl-hd">
               <div>
                 <h2 className="jl-h2">My Assigned Cases</h2>
-                <div className="jl-muted">Active judicial &amp; advisory dockets</div>
+                <div className="jl-muted">Cases assigned to you</div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className="jl-total">{myCases.length} Total</span>
-                <button type="button" className="jl-btn dark" onClick={() => setShowNewCase(true)}>
-                  <Icon name="plus" size={14} /> New Case
-                </button>
-              </div>
+              <span className="jl-total">{cases.length} Total</span>
             </div>
 
             <div className="jl-csearch">
               <Icon name="search" size={14} />
               <input
-                placeholder="Search docket, case ID, or client..."
+                placeholder="Search case number, title or type..."
                 aria-label="Search my cases"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -763,21 +576,25 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
             </div>
 
             <div className="jl-chips" role="group" aria-label="Filter cases by status">
-              {filters.map((f) => (
+              {statuses.map((f) => (
                 <button
                   key={f}
                   type="button"
                   className={`jl-chip${filter === f ? ' on' : ''}`}
                   onClick={() => setFilter(f)}
                 >
-                  {f} ({counts[f] || 0})
+                  {f} ({countFor(f)})
                 </button>
               ))}
             </div>
 
             <div className="jl-list">
-              {myCases.length === 0 && <div className="jl-empty">No cases have been assigned to you yet.</div>}
-              {myCases.length > 0 && visible.length === 0 && <div className="jl-empty">No dockets match your search.</div>}
+              {cases.length === 0 && (
+                <div className="jl-empty">No cases have been assigned to you yet.</div>
+              )}
+              {cases.length > 0 && visible.length === 0 && (
+                <div className="jl-empty">No cases match your search.</div>
+              )}
               {visible.map((c) => (
                 <button
                   key={c.id}
@@ -786,17 +603,17 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
                   onClick={() => setSelectedId(c.id)}
                 >
                   <div className="jl-ci1">
-                    <span className="jl-ref">{c.ref}</span>
+                    <span className="jl-ref">{c.caseNumber}</span>
                     <span className="jl-tag">{c.type}</span>
-                    <StatusPill label={c.status} className="jl-ml" />
+                    <CaseStatusPill label={c.status} className="jl-ml" />
                   </div>
                   <div className="jl-ci2">{c.title}</div>
                   <div className="jl-ci3">
                     <span>
-                      <Icon name="user" size={12} /> {c.clientLabel}
+                      <Icon name="user" size={12} /> {c.clientNumber || 'Client'}
                     </span>
                     <span>
-                      <Icon name="calendar" size={12} /> {prettyDate(c.dateOpened)}
+                      <Icon name="calendar" size={12} /> {c.dateOpened ? formatDate(c.dateOpened) : '—'}
                     </span>
                   </div>
                 </button>
@@ -805,12 +622,13 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
           </section>
         </div>
 
-        {/* Right: selected case details */}
+        {/* Right: selected case */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selected && (
             <section className="jl-card">
               <div className="jl-empty">
-                No case to show yet. When the administrator assigns a case to you, it will appear here.
+                Select a case to see its details, the client and its tasks. Cases appear here once an
+                administrator assigns them to you.
               </div>
             </section>
           )}
@@ -821,30 +639,18 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
                 <div className="jl-dh">
                   <div>
                     <div className="jl-dref">
-                      <span>{selected.ref}</span>
-                      <StatusPill label={selected.status} />
+                      <span>{selected.caseNumber}</span>
+                      <CaseStatusPill label={selected.status} />
                     </div>
                     <h2>{selected.title}</h2>
                     <div className="jl-muted">
-                      {selected.type} — Opened {prettyDate(selected.dateOpened)}
+                      {selected.type} — Opened {selected.dateOpened ? formatDate(selected.dateOpened) : '—'}
                     </div>
                   </div>
                   <div className="jl-btns">
-                    <Link to={ROUTES.tasks} className="jl-btn dark">
-                      <Icon name="plus" size={14} /> Log Activity
+                    <Link to={`/attorney/tasks/new?case=${encodeURIComponent(selected.caseNumber)}`} className="jl-btn dark">
+                      <Icon name="plus" size={14} /> Log Activity / Add Task
                     </Link>
-                  </div>
-                </div>
-
-                <div className="jl-ms">
-                  <div className="jl-ms-h">
-                    <span>TASK PROGRESS</span>
-                    <span className="jl-orange">
-                      {selDone} of {selTasks.length} tasks completed
-                    </span>
-                  </div>
-                  <div className="jl-bar">
-                    <i style={{ width: `${selPct}%` }} />
                   </div>
                 </div>
               </section>
@@ -852,127 +658,64 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
               <section className="jl-card">
                 <div className="jl-hd">
                   <h2 className="jl-h2 ic">
-                    <Icon name="user" size={16} /> Primary Linked Client
+                    <Icon name="user" size={16} /> Client Information
                   </h2>
-                  {client && <span className="jl-total">{client.clientNumber}</span>}
+                  {selected.clientNumber && <span className="jl-total">{selected.clientNumber}</span>}
                 </div>
-                {!client && <div className="jl-empty">No client is linked to this case.</div>}
-                {client && (
-                  <div className="jl-cl">
-                    <div className="jl-cl-i">
-                      <div className="jl-cl-av">{initialsOf(`${client.firstName} ${client.surname}`)}</div>
-                      <div style={{ minWidth: 0 }}>
-                        <b>
-                          {client.firstName} {client.surname}
-                        </b>
-                        <div className="jl-cl-l">
-                          {client.idNumber && (
-                            <span>
-                              <Icon name="briefcase" size={12} /> ID: <span className="jl-mono">{client.idNumber}</span>
-                            </span>
-                          )}
-                          {client.email && (
-                            <span>
-                              <Icon name="mail" size={12} /> {client.email}
-                            </span>
-                          )}
-                          {client.phone && (
-                            <span>
-                              <Icon name="phone" size={12} /> {client.phone}
-                            </span>
-                          )}
-                          {client.address && (
-                            <span>
-                              <Icon name="pin" size={12} /> {client.address}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="jl-ret">
-                      <div className="jl-ret-h">
-                        <span>CLIENT NUMBER</span>
-                      </div>
-                      <div className="jl-ret-v jl-mono">{client.clientNumber}</div>
-                      <div className="jl-btns">
-                        {client.email && (
-                          <a className="jl-btn" href={`mailto:${client.email}`}>
-                            <Icon name="mail" size={13} /> Contact
-                          </a>
-                        )}
+                {client ? (
+                  <div className="jl-cl-i" style={{ marginTop: 12 }}>
+                    <div className="jl-cl-av">{initialsOf(`${client.firstName} ${client.surname}`)}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <b>
+                        {client.firstName} {client.surname}
+                      </b>
+                      <div className="jl-cl-l">
+                        <span>
+                          <Icon name="briefcase" size={12} /> ID / Passport:{' '}
+                          <span className="jl-mono">{client.idNumber || '—'}</span>
+                        </span>
+                        <span>
+                          <Icon name="user" size={12} /> {client.gender || '—'}
+                          {client.dateOfBirth ? ` • Born ${formatDate(client.dateOfBirth)}` : ''}
+                        </span>
+                        <span>
+                          <Icon name="mail" size={12} />
+                          {client.email ? <a href={`mailto:${client.email}`}>{client.email}</a> : '—'}
+                        </span>
+                        <span>
+                          <Icon name="phone" size={12} /> {client.phone || '—'}
+                        </span>
+                        <span style={{ whiteSpace: 'pre-line' }}>
+                          <Icon name="pin" size={12} /> {client.address || '—'}
+                        </span>
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="jl-empty">Client details are not available for this case.</div>
                 )}
               </section>
 
               <section className="jl-card">
                 <h2 className="jl-h2 ic">
-                  <Icon name="scales" size={16} /> Case Brief
+                  <Icon name="scales" size={16} /> Case Summary
                 </h2>
-                <div className="jl-jp">
-                  <div>
-                    <div className="jl-lbl">CASE TYPE</div>
-                    <b>{selected.type || '—'}</b>
-                  </div>
-                  <div>
-                    <div className="jl-lbl">ASSIGNED ATTORNEY</div>
-                    <b>{me.name}</b>
-                    <div className="jl-muted">{me.staffNumber}</div>
-                  </div>
-                  <div>
-                    <div className="jl-lbl">OPENING DATE &amp; STATUS</div>
-                    <b>{prettyDate(selected.dateOpened)}</b>
-                    <div className="jl-orange" style={{ fontSize: 12, fontWeight: 600 }}>
-                      {selected.status}
-                    </div>
-                  </div>
-                </div>
-                <div className="jl-lbl">CASE SUMMARY</div>
-                <p className="jl-sum">{selected.description || 'No case summary has been captured for this docket yet.'}</p>
+                <p className="jl-sum">{selected.description || 'No case summary has been captured for this case yet.'}</p>
               </section>
 
-              <div className="jl-two">
-                <section className="jl-card">
-                  <div className="jl-hd">
-                    <h2 className="jl-h2 ic">
-                      <Icon name="check" size={16} /> Legal Tasks Preview
-                    </h2>
-                    <span className="jl-total">{selTasks.length} Tasks</span>
-                  </div>
-                  {selTasks.length === 0 && <div className="jl-empty">No tasks logged for this docket yet.</div>}
-                  {selTasks.map((t) => {
-                    const tone = t.state === 'Completed' ? 'done' : t.overdue ? 'red' : 'grey';
-                    const icon = tone === 'done' ? 'checkcircle' : tone === 'red' ? 'clock' : 'circle';
-                    return (
-                      <div key={t.id} className="jl-ti">
-                        <span className={`jl-tic ${tone === 'grey' ? '' : tone}`}>
-                          <Icon name={icon} size={14} />
-                        </span>
-                        <div className={`jl-tt${tone === 'done' ? ' done' : ''}`}>
-                          <b>{t.title}</b>
-                          <small>{t.description}</small>
-                        </div>
-                        <span className={`jl-due ${tone}`}>
-                          {tone === 'done' ? 'Done' : `Due ${prettyDate(t.dueDate)}`}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  <Link to={ROUTES.tasks} className="jl-more">
-                    Open All {myTasks.length} Tasks <Icon name="arrow" size={12} />
-                  </Link>
-                </section>
-
-                <section className="jl-card">
-                  <div className="jl-hd">
-                    <h2 className="jl-h2 ic">
-                      <Icon name="folder" size={16} /> Docket Filings &amp; Records
-                    </h2>
-                  </div>
-                  <div className="jl-empty">Document storage is not connected to the system yet.</div>
-                </section>
-              </div>
+              <section className="jl-card">
+                <div className="jl-hd">
+                  <h2 className="jl-h2 ic">
+                    <Icon name="check" size={16} /> Legal Tasks &amp; Activity
+                  </h2>
+                  <span className="jl-total">{caseTasks.length} Tasks</span>
+                </div>
+                {error && <div className="jl-alert">{error}</div>}
+                <TaskTable rows={caseTasks} showCase={false} busyId={busyId} onStatus={onStatus} />
+                <Link to="/attorney/tasks" className="jl-more">
+                  Open all my tasks <Icon name="arrow" size={12} />
+                </Link>
+              </section>
             </>
           )}
         </div>
@@ -981,284 +724,108 @@ export default function AttorneyDashboard({ withShell = false, casesOnly = false
   );
 }
 
-/* ================= Add / Edit task window ================= */
-function TaskModal({ onHide, onSaved, cases, editing }) {
-  const [form, setForm] = useState(
-    editing
-      ? {
-          caseId: editing.caseId,
-          taskName: editing.title,
-          description: editing.description || '',
-          dueDate: editing.dueDate || '',
-          status: editing.state,
-        }
-      : { caseId: cases[0] ? cases[0].id : '', taskName: '', description: '', dueDate: '', status: 'Not Started' }
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
-
-  const save = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (!form.caseId || !form.taskName.trim() || !form.dueDate) {
-      setError('Case, task name and due date are required.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const body = {
-        taskName: form.taskName.trim(),
-        description: form.description.trim(),
-        dueDate: form.dueDate,
-        status: form.status,
-      };
-      let message;
-      if (editing) {
-        await api.put(`/LegalTasks/${editing.id}`, body);
-        message = 'Task updated.';
-      } else {
-        const res = await api.post('/LegalTasks', { ...body, caseId: form.caseId });
-        message = `Task TSK-${String(res.data.id).slice(0, 4).toUpperCase()} was added and saved.`;
-      }
-      await onSaved(message);
-      onHide();
-    } catch (err) {
-      const d = err.response && err.response.data;
-      setError(
-        (d && (d.title || d.message)) ||
-          (err.response && err.response.status === 403
-            ? 'You are not allowed to do that.'
-            : 'Could not save the task. Please try again.')
-      );
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal show onHide={onHide} centered>
-      <Form onSubmit={save}>
-        <Modal.Header closeButton>
-          <Modal.Title>{editing ? 'Edit Legal Task' : 'Add Legal Task'}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {error && <Alert variant="danger">{error}</Alert>}
-
-          <Form.Group className="mb-3">
-            <Form.Label>Task ID</Form.Label>
-            <Form.Control
-              readOnly
-              disabled
-              value={editing ? editing.taskId || editing.id : 'Generated automatically when you save'}
-            />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Case</Form.Label>
-            <Form.Select value={form.caseId} onChange={set('caseId')} disabled={!!editing}>
-              {cases.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.ref} — {c.title}
-                </option>
-              ))}
-            </Form.Select>
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Task name</Form.Label>
-            <Form.Control value={form.taskName} onChange={set('taskName')} placeholder="e.g. Draft replying affidavit" />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Description</Form.Label>
-            <Form.Control as="textarea" rows={3} value={form.description} onChange={set('description')} />
-          </Form.Group>
-
-          <Form.Group className="mb-3">
-            <Form.Label>Due date</Form.Label>
-            <Form.Control type="date" value={form.dueDate} onChange={set('dueDate')} />
-          </Form.Group>
-
-          <Form.Group>
-            <Form.Label>Status</Form.Label>
-            <Form.Select value={form.status} onChange={set('status')}>
-              <option>Not Started</option>
-              <option>In Progress</option>
-              <option>Completed</option>
-            </Form.Select>
-          </Form.Group>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={onHide} disabled={saving}>
-            Cancel
-          </Button>
-          <Button variant="dark" type="submit" disabled={saving}>
-            {saving ? 'Saving...' : editing ? 'Save changes' : 'Add task'}
-          </Button>
-        </Modal.Footer>
-      </Form>
-    </Modal>
-  );
-}
-
 /* ================= Page 2: Legal Tasks & Activities ================= */
-export function LegalTasksPage({ withShell = false }) {
-  const { me, myCases, myTasks } = useMine();
-  const { refreshData } = useData();
-  const [filter, setFilter] = useState('All Tasks');
-  const [modal, setModal] = useState(null); // null, 'new', or the task being edited
-  const [notice, setNotice] = useState('');
+export function LegalTasksPage() {
+  const { cases } = useData();
+  const myTasks = useMyTasks();
+  const { busyId, error, onStatus } = useStatusChange();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const all = myTasks.map((t) => ({
-    id: t.taskId || t.id,
-    key: t.id,
-    task: t,
-    title: t.title,
-    desc: t.description || '—',
-    date: prettyDate(t.dueDate),
-    dateNote: t.overdue ? 'Overdue' : t.theCase.ref,
-    dateTone: t.state === 'Completed' ? 'ok' : t.overdue ? 'warn' : 'muted',
-    counsel: me.name,
-    counselNote: t.theCase.title,
-    status: t.state,
-  }));
+  const [message, setMessage] = useState(location.state?.message || '');
+  const [filter, setFilter] = useState('All');
+  const [caseFilter, setCaseFilter] = useState('All');
+  const [search, setSearch] = useState('');
 
-  const active = TRACKER_FILTERS.find((f) => f.key === filter) || TRACKER_FILTERS[0];
-  const rows = all.filter(active.match);
-  const done = all.filter((t) => t.status === 'Completed').length;
-  const total = all.length;
-  const pct = total ? Math.round((done / total) * 100) : 0;
+  // The form sends back a message once; clear it from the browser history state
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const term = search.trim().toLowerCase();
+  const rows = myTasks.filter((t) => {
+    if (filter !== 'All' && t.status !== filter) return false;
+    if (caseFilter !== 'All' && t.caseNumber !== caseFilter) return false;
+    if (term && !`${t.taskId} ${t.title} ${t.description} ${t.caseNumber}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+
+  const done = myTasks.filter((t) => t.status === 'Complete').length;
+  const pct = myTasks.length === 0 ? 0 : Math.round((done / myTasks.length) * 100);
+  const countFor = (s) => (s === 'All' ? myTasks.length : myTasks.filter((t) => t.status === s).length);
 
   return (
-    <Shell withShell={withShell}>
+    <Shell>
       <section className="jl-card">
         <div className="jl-ph">
           <div>
-            <div className="jl-lbl jl-orange">ACTIVE DOCKET EXECUTION • {myCases.length} ASSIGNED DOCKETS</div>
-            <h1>{'Legal Activity & Milestone Tracker'}</h1>
+            <div className="jl-lbl jl-orange">LEGAL OPERATIONS • TASKS &amp; ACTIVITIES</div>
+            <h1>Legal Activity &amp; Task Tracker</h1>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="jl-btn dark"
-              disabled={myCases.length === 0}
-              style={myCases.length === 0 ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-              title={myCases.length === 0 ? 'You need an assigned case before you can add a task' : ''}
-              onClick={() => setModal('new')}
-            >
-              <Icon name="plus" size={14} /> Add Task
-            </button>
-            <div className="jl-fin">
-              <div>
-                <span>TASK COMPLETION TRACK</span>
-                <b>{pct}%</b>
-              </div>
-              <div className="jl-bar">
-                <i style={{ width: `${pct}%` }} />
-              </div>
-              <div className="jl-muted">
-                {done} of {total} tasks completed
-              </div>
+          <div className="jl-fin">
+            <div>
+              <span>TASK COMPLETION</span>
+              <b>{pct}%</b>
+            </div>
+            <div className="jl-bar">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+            <div className="jl-muted">
+              {done} of {myTasks.length} tasks completed
             </div>
           </div>
         </div>
 
-        {myCases.length === 0 && (
-          <div className="jl-muted" style={{ marginTop: 12 }}>
-            You have no assigned cases yet. Ask the administrator to assign a case to you, then you can add tasks.
+        {message && (
+          <div className="jl-ok" role="status">
+            {message}
+            <button type="button" aria-label="Dismiss" onClick={() => setMessage('')}>
+              ×
+            </button>
           </div>
         )}
-        {notice && (
-          <Alert variant="success" dismissible onClose={() => setNotice('')} style={{ marginTop: 12, marginBottom: 0 }}>
-            {notice}
-          </Alert>
-        )}
+        {error && <div className="jl-alert">{error}</div>}
 
-        <div className="jl-chips" style={{ marginTop: 16, marginBottom: 0 }} role="group" aria-label="Filter tasks by status">
-          {TRACKER_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              className={`jl-chip${filter === f.key ? ' on' : ''}`}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.key} ({all.filter(f.match).length})
-            </button>
-          ))}
+        <div className="jl-bar-tools">
+          <div className="jl-chips" role="group" aria-label="Filter tasks by status">
+            {['All', ...TASK_STATUSES].map((s) => (
+              <button key={s} type="button" className={`jl-chip${filter === s ? ' on' : ''}`} onClick={() => setFilter(s)}>
+                {s === 'All' ? 'All Tasks' : s} ({countFor(s)})
+              </button>
+            ))}
+          </div>
+          <Link to="/attorney/tasks/new" className="jl-btn dark">
+            <Icon name="plus" size={14} /> Add Legal Task
+          </Link>
         </div>
 
-        <div className="jl-tw">
-          <table className="jl-table">
-            <thead>
-              <tr>
-                <th>TASK ID</th>
-                <th>MILESTONE / ACTION ITEM</th>
-                <th>TARGET / COMPLETION</th>
-                <th>SUPERVISING COUNSEL</th>
-                <th>STATUS</th>
-                <th>ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="jl-empty">
-                    No tasks in this view.
-                  </td>
-                </tr>
-              )}
-              {rows.map((t) => (
-                <tr key={t.key}>
-                  <td>
-                    <span className={`jl-tid jl-mono${t.status === 'Not Started' ? ' muted' : ''}`}>{t.id}</span>
-                  </td>
-                  <td>
-                    <b>{t.title}</b>
-                    <small>{t.desc}</small>
-                  </td>
-                  <td>
-                    {t.date}
-                    <small className={t.dateTone === 'ok' ? 'jl-tone-ok' : t.dateTone === 'warn' ? 'jl-tone-warn' : ''}>
-                      {t.dateNote}
-                    </small>
-                  </td>
-                  <td>
-                    {t.counsel}
-                    <small>{t.counselNote}</small>
-                  </td>
-                  <td>
-                    <span className={`jl-stat ${t.status.replace(' ', '').toLowerCase()}`}>{t.status.toUpperCase()}</span>
-                  </td>
-                  <td>
-                    <button type="button" className="jl-btn" onClick={() => setModal(t.task)}>
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="jl-filters">
+          <input
+            className="jl-field"
+            placeholder="Search by task or case..."
+            aria-label="Search tasks"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="jl-field" value={caseFilter} onChange={(e) => setCaseFilter(e.target.value)} aria-label="Filter by case">
+            <option value="All">All my cases</option>
+            {cases.map((c) => (
+              <option key={c.id} value={c.caseNumber}>
+                {c.caseNumber} - {c.title}
+              </option>
+            ))}
+          </select>
         </div>
+
+        <TaskTable rows={rows} showCase busyId={busyId} onStatus={onStatus} />
 
         <div className="jl-notice">
-          <b>Legal Notice &amp; Docket Integrity Protocol</b>
-          Legal task timelines, statuses, and docket filings are strictly maintained and verified by JusticeLaw Attorneys
-          in compliance with the Legal Practice Act (Act No. 28 of 2014) and the respective High Court Rules. {done} of{' '}
-          {total} listed tasks are completed.
+          <b>Recording activity</b>
+          Use the status list on each task to record progress, <i>Edit</i> to change the details, or <i>Add Legal Task</i> to
+          log new work on one of your cases.
         </div>
       </section>
-
-      {modal && (
-        <TaskModal
-          cases={myCases}
-          editing={modal === 'new' ? null : modal}
-          onHide={() => setModal(null)}
-          onSaved={async (message) => {
-            await refreshData();
-            setNotice(message);
-          }}
-        />
-      )}
     </Shell>
   );
 }

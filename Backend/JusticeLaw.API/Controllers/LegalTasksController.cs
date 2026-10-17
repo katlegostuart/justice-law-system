@@ -1,4 +1,4 @@
-﻿using JusticeLaw.API.Data;
+using JusticeLaw.API.Data;
 using JusticeLaw.API.Models;
 using JusticeLaw.API.Models.Entities;
 using Microsoft.AspNetCore.Http;
@@ -55,24 +55,30 @@ namespace JusticeLaw.API.Controllers
             return tasks.Where(t => false);
         }
 
+        // Admin can manage any task. An Attorney can only manage tasks on cases assigned to them.
+        private bool CanManageCase(Guid? caseId)
+        {
+            if (User.IsInRole("Admin")) return true;
+            if (!User.IsInRole("Attorney") || caseId == null) return false;
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return false;
+
+            return dbContext.Cases.Any(c => c.Id == caseId && c.Attorney != null && c.Attorney.UserId == userId);
+        }
+
         [HttpGet]
         public IActionResult GetAllTasks()
         {
             return Ok(VisibleTasks().ToList());
         }
 
-[Authorize(Roles = "Admin,Attorney")]        [HttpPost]
+        [Authorize(Roles = "Admin,Attorney")]
+        [HttpPost]
         public IActionResult AddTask(AddTaskDto addTaskDto)
         {
-                        // An attorney may only add tasks to a case that is assigned to them
-            if (!User.IsInRole("Admin"))
-            {
-                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var ownsCase = dbContext.Cases.Any(c => c.Id == addTaskDto.CaseId
-                                                        && c.Attorney != null
-                                                        && c.Attorney.UserId == userId);
-                if (!ownsCase) return Forbid();
-            }
+            if (!CanManageCase(addTaskDto.CaseId))
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             var taskEntity = new LegalTask()
             {
@@ -107,6 +113,9 @@ namespace JusticeLaw.API.Controllers
         {
             var task = VisibleTasks().FirstOrDefault(t => t.Id == id);
             if (task == null) return NotFound();
+
+            if (!CanManageCase(task.CaseId))
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             task.TaskName = updateTaskDto.TaskName;
             task.Description = updateTaskDto.Description;
