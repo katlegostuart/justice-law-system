@@ -114,13 +114,19 @@ namespace JusticeLaw.API.Controllers
             var task = VisibleTasks().FirstOrDefault(t => t.Id == id);
             if (task == null) return NotFound();
 
-            if (!CanManageCase(task.CaseId))
-                return StatusCode(StatusCodes.Status403Forbidden);
+            // The new case must exist
+            if (updateTaskDto.CaseId == Guid.Empty || !dbContext.Cases.Any(c => c.Id == updateTaskDto.CaseId))
+                return BadRequest("Case not found.");
+
+            // An attorney must own BOTH the task's current case and the case it is being moved to
+            if (!CanManageCase(task.CaseId) || !CanManageCase(updateTaskDto.CaseId))
+                return StatusCode(StatusCodes.Status403Forbidden, "You can only manage tasks on your own cases.");
 
             task.TaskName = updateTaskDto.TaskName;
             task.Description = updateTaskDto.Description;
             task.DueDate = updateTaskDto.DueDate;
             task.Status = updateTaskDto.Status;
+            task.CaseId = updateTaskDto.CaseId;   // <-- the missing line
 
             dbContext.SaveChanges();
             return Ok(task);

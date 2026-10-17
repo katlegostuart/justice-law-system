@@ -8,5 +8,6 @@ namespace JusticeLaw.API.Models
         [Required] public required string Description { get; set; }
         [Required] public DateTime DueDate { get; set; }
         [Required] public required string Status { get; set; }
+        [Required] public Guid CaseId { get; set; }
     }
 }

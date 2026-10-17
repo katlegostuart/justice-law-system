@@ -71,11 +71,12 @@ export default function Tasks() {
     .filter((t) => {
       if (statusTab !== 'All' && t.status !== statusTab) return false;
       if (caseFilter !== 'All' && t.caseNumber !== caseFilter) return false;
-      if (attorneyFilter === 'Unassigned' && t.attorneyNumber) return false;
-      if (attorneyFilter !== 'All' && attorneyFilter !== 'Unassigned' && t.attorneyNumber !== attorneyFilter) return false;
+      const owner = caseOf(t.caseNumber)?.attorneyNumber || '';
+      if (attorneyFilter === 'Unassigned' && owner) return false;
+      if (attorneyFilter !== 'All' && attorneyFilter !== 'Unassigned' && owner !== attorneyFilter) return false;
       if (term) {
         const c = caseOf(t.caseNumber);
-        const a = getAttorney(t.attorneyNumber);
+        const a = getAttorney(owner);
         const text = `${t.taskId} ${t.title} ${t.caseNumber} ${c ? c.title : ''} ${a ? a.name : ''}`.toLowerCase();
         if (!text.includes(term)) return false;
       }
@@ -196,7 +197,7 @@ export default function Tasks() {
               )}
               {rows.map((t) => {
                 const c = caseOf(t.caseNumber);
-                const attorney = getAttorney(t.attorneyNumber);
+                const attorney = getAttorney(c?.attorneyNumber);
                 return (
                   <tr key={t.taskId}>
                     <td>
