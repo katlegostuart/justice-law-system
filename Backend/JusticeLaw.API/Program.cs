@@ -1,4 +1,5 @@
 using System.Text;
+using JusticeLaw.API.Models.Entities;
 using JusticeLaw.API.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -86,6 +87,30 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     await DbSeeder.SeedAsync(scope.ServiceProvider);
+
+    // Default case types (only adds the ones that are missing)
+    var db = scope.ServiceProvider.GetRequiredService<LawDBContext>();
+    var defaultCaseTypes = new[]
+    {
+        "Murder",
+        "Theft and robbery",
+        "Assault",
+        "Fraud",
+        "Rape",
+        "Drug-related offences",
+        "Drunk driving",
+        "Other"
+    };
+
+    foreach (var name in defaultCaseTypes)
+    {
+        if (!db.CaseTypes.Any(t => t.Name == name))
+        {
+            db.CaseTypes.Add(new CaseType { Name = name });
+        }
+    }
+
+    db.SaveChanges();
 }
 
 // Configure the HTTP request pipeline.

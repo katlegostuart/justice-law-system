@@ -1,147 +1,1268 @@
-import { Link } from 'react-router-dom';
-import { Row, Col } from 'react-bootstrap';
-import Icon from '../components/Icon';
-import { Avatar, PageHeader, StatCard, StatusPill, TypePill, formatDate } from '../components/ui';
+/*
+  AttorneyDashboard.jsx
+
+  Exports:
+    default -> AttorneyDashboard (my cases, client, case details)
+    named   -> LegalTasksPage    (Legal Activity & Milestone Tracker)
+    named   -> MyCasesPage       (cases only, no profile header)
+
+  Routes (App.jsx):
+    /attorney        -> AttorneyDashboard
+    /attorney/tasks  -> LegalTasksPage
+
+  Data comes from the database through DataContext. The API already returns only
+  the cases and tasks that belong to the logged-in attorney.
+*/
+import { useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import api from '../services/api';
+import { Modal, Form, Button, Alert } from 'react-bootstrap';
 
-export default function AdminDashboard() {
-  const { clients, attorneys, cases, getAttorney, clientName, caseload, maxCaseload } = useData();
+/* ================= Routes and navigation ================= */
+const ROUTES = {
+  dashboard: '/attorney',
+  clients: '/attorney/clients',
+  cases: '/attorney/cases',
+  tasks: '/attorney/tasks',
+  research: '/attorney/settings',
+};
 
-  const active = cases.filter((c) => c.status !== 'Closed').length;
-  const unassigned = cases.filter((c) => !c.attorneyNumber && c.status !== 'Closed').length;
+/* Attorney-only navigation */
+const NAV = [
+  { label: 'Overview / Dashboard', icon: 'grid', to: ROUTES.dashboard },
+  { label: 'Clients Management', icon: 'users', to: ROUTES.clients },
+  { label: 'Cases & Dockets', icon: 'folder', to: ROUTES.cases },
+  { label: 'Legal Tasks & Activities', icon: 'check', to: ROUTES.tasks },
+  { label: 'Research & Settings', icon: 'book', to: ROUTES.research },
+];
 
-  const recent = [...cases].sort((a, b) => b.dateOpened.localeCompare(a.dateOpened)).slice(0, 6);
+/* ================= Real data (replaces the old mock data) ================= */
+const isDone = (s) => /complete|done|closed/i.test(s || '');
+const taskState = (s) =>
+  isDone(s) ? 'Completed' : /in\s*progress|ongoing|active/i.test(s || '') ? 'In Progress' : 'Not Started';
+const initialsOf = (name) =>
+  (name || '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
+const todayStr = () => new Date().toISOString().split('T')[0];
+const prettyDate = (d) => {
+  if (!d) return '—';
+  const x = new Date(d);
+  return Number.isNaN(x.getTime()) ? d : x.toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+/* The logged-in attorney, their cases and their tasks, all from the database */
+function useMine() {
+  const { user } = useAuth();
+  const { cases, tasks, clients, attorneys, maxCaseload } = useData();
+
+  return useMemo(() => {
+    const staffNumber = user?.staffNumber || '';
+    const name = user?.name || user?.email || 'Attorney';
+    const profile = attorneys.find((a) => a.staffNumber === staffNumber);
+
+    const myCases = cases
+      .filter((c) => !staffNumber || c.attorneyNumber === staffNumber)
+      .map((c) => {
+        const client = clients.find((cl) => cl.id === c.clientId || cl.clientNumber === c.clientNumber);
+        return {
+          id: c.id,
+          ref: c.caseNumber,
+          title: c.title,
+          type: c.type,
+          status: c.status || 'Open',
+          description: c.description,
+          dateOpened: c.dateOpened,
+          client,
+          clientLabel: client ? `${client.firstName} ${client.surname}`.trim() : 'Client not found',
+        };
+      });
+
+    const caseById = {};
+    myCases.forEach((c) => { caseById[c.id] = c; });
+
+    const myTasks = tasks
+      .filter((t) => caseById[t.caseId])
+      .map((t) => ({
+        ...t,
+        state: taskState(t.status),
+        overdue: !isDone(t.status) && !!t.dueDate && t.dueDate < todayStr(),
+        theCase: caseById[t.caseId],
+      }));
+
+    return {
+      me: {
+        name,
+        staffNumber,
+        initials: initialsOf(name),
+        email: user?.email || '',
+        specialization: profile?.specialization || '',
+      },
+      myCases,
+      myTasks,
+      max: maxCaseload || 8,
+    };
+  }, [user, cases, tasks, clients, attorneys, maxCaseload]);
+}
+
+
+const TRACKER_FILTERS = [
+  { key: 'All Tasks', match: () => true },
+  { key: 'In Progress', match: (t) => t.status === 'In Progress' },
+  { key: 'Completed', match: (t) => t.status === 'Completed' },
+  { key: 'Pending Schedule', match: (t) => t.status === 'Not Started' },
+];
+
+/* ================= Icons (inline SVG, no extra package) ================= */
+const ICONS = {
+  grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  check: '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  arrow: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  circle: '<circle cx="12" cy="12" r="9"/>',
+  checkcircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  briefcase: '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  building: '<rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="18"/><line x1="15" y1="22" x2="15" y2="18"/><line x1="8" y1="6" x2="8.01" y2="6"/><line x1="12" y1="6" x2="12.01" y2="6"/><line x1="16" y1="6" x2="16.01" y2="6"/><line x1="8" y1="10" x2="8.01" y2="10"/><line x1="12" y1="10" x2="12.01" y2="10"/><line x1="16" y1="10" x2="16.01" y2="10"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  scales: '<line x1="12" y1="3" x2="12" y2="21"/><line x1="5" y1="21" x2="19" y2="21"/><line x1="4" y1="7" x2="20" y2="7"/><path d="M4 7l-3 7a3 3 0 0 0 6 0z"/><path d="M20 7l-3 7a3 3 0 0 0 6 0z"/>',
+};
+
+function Icon({ name, size = 16 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: ICONS[name] }}
+    />
+  );
+}
+
+/* ================= Styles (scoped with the jl- prefix) ================= */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* Base */
+.jl{font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color:#0f172a;background:#f6f7fb;min-height:100vh;display:flex;font-size:14px;line-height:1.4}
+.jl *{box-sizing:border-box}
+.jl button{font-family:inherit}
+.jl-mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.jl-orange{color:#c2410c !important}
+.jl-muted{color:#64748b;font-size:12px}
+.jl-lbl{font-size:10px;letter-spacing:.08em;font-weight:700;color:#64748b}
+.jl-empty{padding:24px 8px;text-align:center;color:#64748b;font-size:13px}
+
+/* Sidebar */
+.jl-side{width:244px;flex:0 0 244px;background:#0f1729;color:#cbd5e1;display:flex;flex-direction:column;padding:20px 14px;position:sticky;top:0;height:100vh}
+.jl-logo{display:flex;align-items:center;gap:10px;padding:0 8px 22px;color:#f59e0b}
+.jl-logo b{display:block;color:#fff;font-size:15px;letter-spacing:.06em;line-height:1.1}
+.jl-logo small{color:#f59e0b;font-size:10px;letter-spacing:.16em;font-weight:700}
+.jl-sec{font-size:10px;letter-spacing:.14em;color:#64748b;padding:0 10px 8px;font-weight:600}
+.jl-nav{display:flex;flex-direction:column;gap:4px}
+.jl-nav a{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:8px;color:#94a3b8;text-decoration:none;font-weight:500}
+.jl-nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+.jl-nav a.on{background:#dbeafe;color:#0f1729;font-weight:600}
+.jl-sidefoot{margin-top:auto;font-size:11px;color:#64748b;padding:0 10px}
+.jl-sidefoot div:first-child{display:flex;justify-content:space-between;letter-spacing:.08em}
+.jl-sidefoot b{color:#f59e0b}
+
+/* Top bar and page frame */
+.jl-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.jl-top{display:flex;align-items:center;gap:14px;padding:14px 24px}
+.jl-gs{flex:1;max-width:480px;position:relative}
+.jl-gs svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#64748b}
+.jl-gs input{width:100%;border:0;background:#eaf0fb;border-radius:8px;padding:9px 12px 9px 36px;font:inherit;color:#0f172a}
+.jl-gs input::placeholder{color:#64748b}
+.jl-topr{margin-left:auto;display:flex;align-items:center;gap:14px}
+.jl-cp{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;border-radius:999px;font-size:11px;font-weight:600}
+.jl-cp i{width:6px;height:6px;border-radius:50%;background:#f59e0b}
+.jl-bell{position:relative;color:#334155;display:grid;place-items:center}
+.jl-bell::after{content:'';position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:#f59e0b}
+.jl-me{display:flex;gap:10px;align-items:center;text-align:right}
+.jl-me b{display:block;font-size:12px}
+.jl-me small{color:#c2410c;font-size:11px;font-weight:600}
+.jl-av{width:36px;height:36px;border-radius:50%;background:#0f1729;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+.jl-page{padding:0 24px 32px;display:flex;flex-direction:column;gap:16px}
+.jl-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px}
+
+/* Profile header and KPIs */
+.jl-prof{background:#fff;border:1px solid #e5e7eb;border-left:4px solid #f59e0b;border-radius:12px;padding:16px 20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.jl-prof-l{display:flex;gap:16px;align-items:center;min-width:280px}
+.jl-ava{width:64px;height:64px;border-radius:12px;background:#0f1729;color:#fff;display:grid;place-items:center;font-size:20px;font-weight:700;position:relative;flex:0 0 64px}
+.jl-ava::after{content:'';position:absolute;right:-4px;bottom:-4px;width:16px;height:16px;border-radius:50%;background:#f59e0b;border:2px solid #fff}
+.jl-prof h1{margin:0 0 4px;font-size:20px;font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.jl-idchip{font-size:10px;font-weight:700;background:#e6edfb;color:#1e3a8a;border-radius:5px;padding:2px 6px}
+.jl-role{font-size:10px;font-weight:700;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:5px;padding:1px 6px}
+.jl-sub{color:#475569;font-size:13px}
+.jl-sub2{display:flex;gap:14px;flex-wrap:wrap;color:#64748b;font-size:12px;margin-top:6px}
+.jl-sub2 span{display:inline-flex;gap:5px;align-items:center}
+.jl-kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));background:#f8faff;border:1px solid #e5e7eb;border-radius:10px;flex:1 1 680px;max-width:800px}
+.jl-kpi{padding:12px 16px;border-right:1px solid #e5e7eb;min-width:0}
+.jl-kpi:last-child{border-right:0}
+.jl-kl{display:flex;gap:5px;align-items:center;font-size:10px;letter-spacing:.08em;font-weight:700;color:#475569}
+.jl-kv{font-size:12px;color:#475569;margin:2px 0;white-space:nowrap}
+.jl-kv b{font-size:24px;color:#0f172a;font-weight:700}
+.jl-km{font-size:11px;color:#64748b}
+.jl-bar{height:5px;background:#e2e8f0;border-radius:99px;margin:4px 0;overflow:hidden}
+.jl-bar i{display:block;height:100%;background:#0f1729;border-radius:99px}
+
+/* Layout, headings, chips */
+.jl-grid{display:grid;grid-template-columns:minmax(300px,390px) 1fr;gap:16px;align-items:start}
+.jl-grid>div{min-width:0}
+.jl-h2{margin:0;font-size:15px;font-weight:700}
+.jl-h2.ic{display:flex;gap:8px;align-items:center}
+.jl-hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.jl-total{font-size:11px;font-weight:700;background:#e6edfb;color:#1e3a8a;border-radius:6px;padding:2px 8px}
+.jl-csearch{position:relative;margin:12px 0 10px}
+.jl-csearch svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#64748b}
+.jl-csearch input{width:100%;border:1px solid #e2e8f0;background:#f8faff;border-radius:8px;padding:9px 12px 9px 34px;font:inherit;font-size:13px}
+.jl-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.jl-chip{padding:5px 12px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#0f172a}
+.jl-chip.on{background:#0f1729;color:#fff;border-color:#0f1729}
+
+/* Case list */
+.jl-list{display:flex;flex-direction:column;gap:2px}
+.jl-ci{width:100%;text-align:left;background:transparent;border:1px solid transparent;border-bottom:1px solid #eef0f4;border-radius:8px;padding:12px;cursor:pointer;color:inherit}
+.jl-ci:hover{background:#f8faff}
+.jl-ci.on{background:#fff;border:1px solid #e5e7eb;border-left:4px solid #f59e0b;box-shadow:0 2px 10px rgba(15,23,42,.07)}
+.jl-ci1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.jl-ref{font-size:11px;font-weight:700;color:#c2410c}
+.jl-tag{font-size:10px;font-weight:600;background:#e6edfb;color:#1e3a8a;border-radius:5px;padding:1px 7px}
+.jl-ml{margin-left:auto}
+.jl-ci2{font-size:14px;font-weight:700;margin:6px 0 4px}
+.jl-ci3{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#64748b}
+.jl-ci3 span{display:inline-flex;gap:5px;align-items:center;min-width:0}
+.jl-st{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.jl-st i{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
+.jl-st-prog{background:#eef0ff;color:#4338ca}
+.jl-st-pend{background:#eff6ff;color:#2563eb}
+.jl-st-rev{background:#eaf0fb;color:#3b4a6b}
+.jl-st-open{background:#f1f5f9;color:#0f172a}
+
+/* Case details */
+.jl-dh{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.jl-dref{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;font-weight:700;color:#c2410c}
+.jl-prio{background:#fee2e2;color:#b91c1c;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700}
+.jl-dh h2{margin:8px 0 6px;font-size:30px;line-height:1.1;font-weight:700;max-width:440px}
+.jl-btns{display:flex;gap:8px;flex-wrap:wrap}
+.jl-btn{padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#0f172a;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center;text-decoration:none}
+.jl-btn.dark{background:#0f1729;color:#fff;border-color:#0f1729}
+.jl-ms{background:#f6f8fc;border-radius:10px;padding:12px 14px;margin-top:16px}
+.jl-ms-h{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.1em;font-weight:700;color:#475569;margin-bottom:8px}
+.jl-ms-bar,.jl-ms-lb{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.jl-ms-bar i{height:4px;border-radius:99px;background:#e2e8f0}
+.jl-ms-bar i.d{background:#0f1729}
+.jl-ms-bar i.c{background:#f59e0b}
+.jl-ms-lb span{font-size:11px;color:#475569;margin-top:6px}
+.jl-ms-lb span.c{color:#c2410c;font-weight:600}
+
+/* Client and retainer */
+.jl-cl{display:grid;grid-template-columns:1fr 230px;gap:16px;margin-top:12px}
+.jl-cl-i{display:flex;gap:12px}
+.jl-cl-av{width:54px;height:54px;border-radius:10px;background:#e6edfb;color:#1e3a8a;display:grid;place-items:center;font-weight:700;flex:0 0 54px}
+.jl-cl-i b{font-size:15px}
+.jl-cl-l{display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:12px;color:#475569}
+.jl-cl-l span{display:flex;gap:6px;align-items:center;min-width:0;overflow-wrap:anywhere}
+.jl-ret{background:#f1f6ff;border:1px solid #dbe6fb;border-radius:10px;padding:12px}
+.jl-ret-h{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.06em;font-weight:700;color:#475569}
+.jl-ret-h em{font-style:normal;color:#15803d;display:inline-flex;gap:4px;align-items:center}
+.jl-ret-v{font-size:21px;font-weight:700;margin:6px 0 2px}
+.jl-ret .jl-btns{margin-top:10px}
+.jl-ret .jl-btn{flex:1;justify-content:center}
+
+/* Judicial brief, tasks preview, filings */
+.jl-jp{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;background:#f6f8fc;border-radius:10px;padding:12px 14px;margin:12px 0}
+.jl-jp b{display:block;font-size:14px;margin-top:2px}
+.jl-sum{font-size:13px;color:#334155;margin:6px 0 0}
+.jl-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.jl-ti{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:#f6f8fc;margin-top:8px}
+.jl-tic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:0 0 26px;background:#e2e8f0;color:#475569}
+.jl-tic.red{background:#fee2e2;color:#dc2626}
+.jl-tic.done{background:#dcfce7;color:#15803d}
+.jl-tt{flex:1;min-width:0}
+.jl-tt b{font-size:13px;display:block}
+.jl-tt.done b{text-decoration:line-through;color:#64748b}
+.jl-tt small{color:#64748b;font-size:11px}
+.jl-due{font-size:10px;font-weight:700;border-radius:6px;padding:2px 7px;background:#e2e8f0;color:#475569;white-space:nowrap}
+.jl-due.red{background:#fee2e2;color:#b91c1c}
+.jl-due.done{background:transparent;color:#64748b;font-weight:600}
+.jl-fi{display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;background:#f6f8fc;margin-top:8px}
+.jl-fic{width:30px;height:30px;border-radius:8px;background:#e6edfb;color:#1e3a8a;display:grid;place-items:center;flex:0 0 30px}
+.jl-fi .jl-tt b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jl-fi button{background:none;border:0;color:#64748b;cursor:pointer;padding:4px}
+.jl-fi button:hover{color:#0f172a}
+.jl-more{display:inline-flex;gap:6px;align-items:center;margin-top:12px;font-size:12px;font-weight:700;color:#c2410c;text-decoration:none;background:none;border:0;cursor:pointer;padding:0}
+.jl-ed{font-size:10px;font-weight:600;background:#f1f5f9;border-radius:5px;padding:2px 6px;color:#475569}
+
+/* Legal tasks page */
+.jl-ph{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-end}
+.jl-ph h1{margin:4px 0 0;font-size:28px;font-weight:700}
+.jl-fin{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;min-width:240px}
+.jl-fin div:first-child{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.08em;font-weight:700;color:#475569}
+.jl-fin b{color:#c2410c;font-size:15px}
+.jl-fin .jl-bar i{background:#f59e0b}
+.jl-tw{overflow-x:auto;margin-top:12px}
+.jl-table{width:100%;border-collapse:collapse;min-width:760px}
+.jl-table th{text-align:left;font-size:10px;letter-spacing:.08em;color:#64748b;font-weight:700;padding:10px 12px;border-bottom:1px solid #e5e7eb}
+.jl-table td{padding:14px 12px;border-bottom:1px solid #eef0f4;vertical-align:top;font-size:13px}
+.jl-table td b{display:block;font-size:14px}
+.jl-table small{display:block;color:#64748b;font-size:11px;margin-top:2px}
+.jl-tid{font-size:12px;font-weight:600;color:#c2410c}
+.jl-tid.muted{color:#64748b}
+.jl-tone-ok{color:#15803d !important}
+.jl-tone-warn{color:#c2410c !important}
+.jl-stat{display:inline-block;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 10px;white-space:nowrap}
+.jl-stat.completed{background:#dcfce7;color:#15803d}
+.jl-stat.inprogress{background:#fef3c7;color:#b45309}
+.jl-stat.notstarted{background:#f1f5f9;color:#475569}
+.jl-notice{background:#f1f6ff;border:1px solid #dbe6fb;border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12px;color:#475569}
+.jl-notice b{display:block;color:#0f172a;font-size:13px;margin-bottom:4px}
+
+/* Width fixes: stop content overflowing the layout */
+.jl{width:100%;min-width:0;max-width:100%}
+.jl-main,.jl-page{min-width:0;max-width:100%}
+.jl-grid{grid-template-columns:minmax(300px,390px) minmax(0,1fr)}
+.jl-two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.jl-cl{grid-template-columns:minmax(0,1fr) 230px}
+.jl-two>*,.jl-cl>*{min-width:0}
+.jl-kpis{min-width:0}
+
+/* Responsive */
+@media (max-width:1100px){.jl-grid,.jl-two,.jl-cl{grid-template-columns:1fr}}
+@media (max-width:900px){.jl{flex-direction:column}.jl-side{width:auto;flex:none;height:auto;position:static}.jl-jp{grid-template-columns:1fr}}
+`;
+
+/* ================= Shared shell: sidebar + top bar ================= */
+function Shell({ withShell, children }) {
+  const { pathname } = useLocation();
+  const { me } = useMine();
+
+  const isActive = (to) =>
+    to === ROUTES.dashboard
+      ? pathname === to || pathname === `${to}/`
+      : pathname.startsWith(to);
+
+  if (!withShell) {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div className="jl">
+          <div className="jl-main">
+            <div className="jl-page">{children}</div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
-      <div className="hero mb-4">
-        <div>
-          <div className="eyebrow">Firm overview</div>
-          <h2>Administrator Command Center</h2>
-        </div>
-        <div className="hero-actions">
-          <Link to="/admin/clients/new" className="btn btn-ghost-light">
-            <Icon name="userPlus" size={16} /> Register Client
-          </Link>
-          <Link to="/admin/cases/new" className="btn btn-accent">
-            <Icon name="plus" size={16} /> New Case
-          </Link>
+      <style>{CSS}</style>
+      <div className="jl">
+        <aside className="jl-side">
+          <div className="jl-logo">
+            <Icon name="scales" size={30} />
+            <div>
+              <b>JUSTICELAW</b>
+              <small>ATTORNEYS</small>
+            </div>
+          </div>
+          <div className="jl-sec">LEGAL OPERATIONS</div>
+          <nav className="jl-nav" aria-label="Attorney navigation">
+            {NAV.map((item) => (
+              <Link key={item.to} to={item.to} className={isActive(item.to) ? 'on' : ''}>
+                <Icon name={item.icon} size={16} />
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="jl-sidefoot">
+            <div>
+              <span>JURISDICTION</span>
+              <b>High Court</b>
+            </div>
+            <div>Docket Filing Sync: Active</div>
+          </div>
+        </aside>
+
+        <div className="jl-main">
+          <header className="jl-top">
+            <div className="jl-gs">
+              <Icon name="search" size={15} />
+              <input placeholder="Search docket, clients, matters..." aria-label="Search docket, clients, matters" />
+            </div>
+            <div className="jl-topr">
+              <span className="jl-cp">
+                <i />
+                Attorney
+              </span>
+              <span className="jl-bell" aria-label="Notifications">
+                <Icon name="bell" size={18} />
+              </span>
+              <div className="jl-me">
+                <div>
+                  <b>{me.name}</b>
+                  <small>{me.staffNumber || 'Attorney'}</small>
+                </div>
+                <div className="jl-av">{me.initials}</div>
+              </div>
+            </div>
+          </header>
+          <div className="jl-page">{children}</div>
         </div>
       </div>
-
-      <Row className="g-3 mb-4">
-        <Col xl={3} sm={6}>
-          <StatCard label="Total active cases" value={active} hint={`${cases.length} cases in total`} icon="folder" />
-        </Col>
-        <Col xl={3} sm={6}>
-          <StatCard
-            label="Unassigned matters"
-            value={unassigned}
-            hint={unassigned > 0 ? 'Action required: needs an attorney' : 'All cases have an attorney'}
-            icon="alert"
-            tone={unassigned > 0 ? 'danger' : undefined}
-          />
-        </Col>
-        <Col xl={3} sm={6}>
-          <StatCard label="Registered attorneys" value={attorneys.length} hint={`Max ${maxCaseload} active cases each`} icon="briefcase" />
-        </Col>
-        <Col xl={3} sm={6}>
-          <StatCard label="Registered clients" value={clients.length} hint="Each client can hold many cases" icon="users" />
-        </Col>
-      </Row>
-
-      <Row className="g-3">
-        <Col xl={8}>
-          <div className="panel">
-            <div className="panel-head">
-              <h2 className="panel-title">
-                Active Case Docket &amp; Attorney Roster
-                <span className="count-badge">Showing {recent.length} of {cases.length}</span>
-              </h2>
-              <Link to="/admin/cases" className="link-btn">View all cases</Link>
-            </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Case</th>
-                    <th>Matter</th>
-                    <th>Client</th>
-                    <th>Assigned attorney</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((c) => {
-                    const attorney = getAttorney(c.attorneyNumber);
-                    return (
-                      <tr key={c.caseNumber} className={!attorney && c.status !== 'Closed' ? 'row-unassigned' : ''}>
-                        <td>
-                          <div className="cell-id">{c.caseNumber}</div>
-                          <div className="cell-sub">{formatDate(c.dateOpened)}</div>
-                        </td>
-                        <td>
-                          <div className="cell-title">{c.title}</div>
-                          <TypePill type={c.type} />
-                        </td>
-                        <td>
-                          <div className="cell-title">{clientName(c.clientNumber)}</div>
-                          <div className="cell-sub">{c.clientNumber}</div>
-                        </td>
-                        <td>
-                          {attorney ? (
-                            <div className="cell-person">
-                              <Avatar name={attorney.name} size={32} />
-                              <div>
-                                <div className="cell-title">{attorney.name}</div>
-                                <div className="cell-sub">{attorney.staffNumber}</div>
-                              </div>
-                            </div>
-                          ) : (
-                            <Link to="/admin/cases" className="unassigned-btn">
-                              <Icon name="alert" size={14} /> Unassigned
-                            </Link>
-                          )}
-                        </td>
-                        <td><StatusPill status={c.status} /></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </Col>
-
-        <Col xl={4}>
-          <div className="panel">
-            <div className="panel-head">
-              <h2 className="panel-title">Caseload Dispersion</h2>
-            </div>
-            <div className="panel-body">
-              <p className="cell-sub mb-3">Active cases per attorney (maximum {maxCaseload}).</p>
-              {attorneys.map((a) => {
-                const load = caseload(a.staffNumber);
-                const pct = Math.round((load / maxCaseload) * 100);
-                return (
-                  <div className="load-row" key={a.staffNumber}>
-                    <div className="load-top">
-                      <span>{a.name} ({a.staffNumber})</span>
-                      <span>{load} / {maxCaseload}</span>
-                    </div>
-                    <div className="bar">
-                      <div className={pct >= 75 ? 'warm' : ''} style={{ width: `${Math.max(pct, 3)}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </Col>
-      </Row>
     </>
   );
 }
+
+/* ================= Small shared pieces ================= */
+const STATUS_CLASS = { 'In Progress': 'prog', 'Pending Hearing': 'pend', Review: 'rev', Open: 'open', Closed: 'rev', Completed: 'rev' };
+
+function StatusPill({ label, className = '' }) {
+  return (
+    <span className={`jl-st jl-st-${STATUS_CLASS[label] || 'open'} ${className}`}>
+      <i />
+      {label}
+    </span>
+  );
+}
+
+/* ================= Page 1: Attorney dashboard ================= */
+/* ================= New case window ================= */
+const NO_ID = '00000000-0000-0000-0000-000000000000';
+const CASE_STATUSES = ['Open', 'In Progress', 'Pending Hearing', 'Review'];
+
+function CaseModal({ onHide, onSaved, clients, caseTypes, nextCaseNumber }) {
+  const [form, setForm] = useState({
+    caseNumber: nextCaseNumber(),
+    caseName: '',
+    caseDescription: '',
+    dateOpened: todayStr(),
+    caseStatus: 'Open',
+    caseTypeId: caseTypes[0] ? caseTypes[0].id : '',
+    clientId: clients[0] ? clients[0].id : '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [otherType, setOtherType] = useState('');
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+  const missingLists = clients.length === 0 || caseTypes.length === 0;
+  const selectedType = caseTypes.find((t) => t.id === form.caseTypeId);
+  const isOther = !!selectedType && selectedType.name === 'Other';
+
+  const save = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!form.caseNumber.trim() || !form.caseName.trim() || !form.clientId || !form.caseTypeId || !form.dateOpened) {
+      setError('Case number, case name, client, case type and date opened are required.');
+      return;
+    }
+    if (isOther && !otherType.trim()) {
+      setError('Please say what the other case type is.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.post('/Cases', {
+        caseNumber: form.caseNumber.trim(),
+        caseName: form.caseName.trim(),
+        caseDescription: (isOther ? `[Other: ${otherType.trim()}] ` : '') + form.caseDescription.trim(),
+        dateOpened: form.dateOpened,
+        caseStatus: form.caseStatus,
+        caseTypeId: form.caseTypeId,
+        clientId: form.clientId,
+        attorneyId: NO_ID, // the API assigns the logged-in attorney
+      });
+      await onSaved(`Case ${(res.data && res.data.caseNumber) || form.caseNumber} was created and saved.`);
+      onHide();
+    } catch (err) {
+      const d = err.response && err.response.data;
+      setError(
+        (d && (d.title || d.message)) ||
+          (err.response && err.response.status === 403
+            ? 'You are not allowed to create cases.'
+            : 'Could not save the case. Please try again.')
+      );
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal show onHide={onHide} centered>
+      <Form onSubmit={save}>
+        <Modal.Header closeButton>
+          <Modal.Title>New Case</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {error && <Alert variant="danger">{error}</Alert>}
+          {missingLists && (
+            <Alert variant="warning">
+              No clients or case types are available to you yet. Ask the administrator to add them.
+            </Alert>
+          )}
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case number</Form.Label>
+            <Form.Control value={form.caseNumber} onChange={set('caseNumber')} />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case name</Form.Label>
+            <Form.Control value={form.caseName} onChange={set('caseName')} placeholder="e.g. Vanderbilt Asset Restructuring" />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Client</Form.Label>
+            <Form.Select value={form.clientId} onChange={set('clientId')}>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.clientNumber} — {c.firstName} {c.surname}
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case type</Form.Label>
+            <Form.Select value={form.caseTypeId} onChange={set('caseTypeId')}>
+              {caseTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Form.Select>
+            {isOther && (
+              <Form.Control
+                className="mt-2"
+                placeholder="Specify the other case type"
+                value={otherType}
+                onChange={(e) => setOtherType(e.target.value)}
+              />
+            )}
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Description</Form.Label>
+            <Form.Control as="textarea" rows={3} value={form.caseDescription} onChange={set('caseDescription')} />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Date opened</Form.Label>
+            <Form.Control type="date" value={form.dateOpened} onChange={set('dateOpened')} />
+          </Form.Group>
+
+          <Form.Group>
+            <Form.Label>Status</Form.Label>
+            <Form.Select value={form.caseStatus} onChange={set('caseStatus')}>
+              {CASE_STATUSES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={onHide} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="dark" type="submit" disabled={saving || missingLists}>
+            {saving ? 'Saving...' : 'Create case'}
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
+export default function AttorneyDashboard({ withShell = false, casesOnly = false }) {
+  const { me, myCases, myTasks, max } = useMine();
+  const { clients, caseTypes, refreshData, nextCaseNumber } = useData();
+  const [showNewCase, setShowNewCase] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('All');
+  const [selectedId, setSelectedId] = useState(null);
+
+  const filters = useMemo(() => ['All', ...new Set(myCases.map((c) => c.status))], [myCases]);
+
+  const counts = useMemo(() => {
+    const o = { All: myCases.length };
+    myCases.forEach((c) => { o[c.status] = (o[c.status] || 0) + 1; });
+    return o;
+  }, [myCases]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return myCases.filter(
+      (c) =>
+        (filter === 'All' || c.status === filter) &&
+        `${c.ref} ${c.title} ${c.clientLabel}`.toLowerCase().includes(q)
+    );
+  }, [myCases, query, filter]);
+
+  const selected = myCases.find((c) => c.id === selectedId) || myCases[0] || null;
+  const client = selected ? selected.client : null;
+  const selTasks = selected ? myTasks.filter((t) => t.caseId === selected.id) : [];
+  const selDone = selTasks.filter((t) => t.state === 'Completed').length;
+  const selPct = selTasks.length ? Math.round((selDone / selTasks.length) * 100) : 0;
+
+  const active = myCases.filter((c) => !isDone(c.status)).length;
+  const pct = Math.min(100, Math.round((active / max) * 100));
+  const openTasks = myTasks.filter((t) => t.state !== 'Completed');
+  const overdue = myTasks.filter((t) => t.overdue).length;
+  const doneTasks = myTasks.length - openTasks.length;
+  const clientCount = new Set(myCases.map((c) => c.client && c.client.id).filter(Boolean)).size;
+
+  return (
+    <Shell withShell={withShell}>
+      {notice && (
+        <Alert variant="success" dismissible onClose={() => setNotice('')} className="mb-0">
+          {notice}
+        </Alert>
+      )}
+
+      {showNewCase && (
+        <CaseModal
+          clients={clients}
+          caseTypes={caseTypes}
+          nextCaseNumber={nextCaseNumber}
+          onHide={() => setShowNewCase(false)}
+          onSaved={async (message) => {
+            await refreshData();
+            setNotice(message);
+          }}
+        />
+      )}
+
+      {casesOnly && (
+        <div className="jl-ph">
+          <div>
+            <div className="jl-lbl jl-orange">LEGAL OPERATIONS • CASES &amp; DOCKETS</div>
+            <h1>My Cases</h1>
+          </div>
+          <span className="jl-total">{myCases.length} Total</span>
+        </div>
+      )}
+
+      {/* Profile header (dashboard only) */}
+      {!casesOnly && (
+        <section className="jl-prof">
+          <div className="jl-prof-l">
+            <div className="jl-ava">{me.initials}</div>
+            <div>
+              <h1>
+                {me.name}
+                {me.staffNumber && <span className="jl-idchip">ID #{me.staffNumber}</span>}
+                <span className="jl-role">Attorney</span>
+              </h1>
+              <div className="jl-sub">{me.specialization || 'Attorney'}</div>
+              <div className="jl-sub2">
+                {me.email && (
+                  <span>
+                    <Icon name="mail" size={13} /> {me.email}
+                  </span>
+                )}
+                {me.specialization && (
+                  <span>
+                    <Icon name="scales" size={13} /> {me.specialization}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="jl-kpis">
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="briefcase" size={12} /> ACTIVE CASES
+              </div>
+              <div className="jl-kv">
+                <b>{active}</b> / {max} Max
+              </div>
+              <div className="jl-bar">
+                <i style={{ width: `${pct}%` }} />
+              </div>
+              <div className="jl-km">{pct}% Caseload cap</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="file" size={12} /> OPEN TASKS
+              </div>
+              <div className="jl-kv">
+                <b>{openTasks.length}</b> {overdue > 0 && <span className="jl-orange">{overdue} overdue</span>}
+              </div>
+              <div className="jl-km">Across {new Set(openTasks.map((t) => t.caseId)).size} matters</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="check" size={12} /> COMPLETED TASKS
+              </div>
+              <div className="jl-kv">
+                <b>{doneTasks}</b> of {myTasks.length}
+              </div>
+              <div className="jl-km">Finished so far</div>
+            </div>
+            <div className="jl-kpi">
+              <div className="jl-kl">
+                <Icon name="users" size={12} /> CLIENTS
+              </div>
+              <div className="jl-kv">
+                <b>{clientCount}</b> Linked
+              </div>
+              <div className="jl-km">From your assigned cases</div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="jl-grid">
+        {/* Left: my assigned cases */}
+        <div>
+          <section className="jl-card">
+            <div className="jl-hd">
+              <div>
+                <h2 className="jl-h2">My Assigned Cases</h2>
+                <div className="jl-muted">Active judicial &amp; advisory dockets</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span className="jl-total">{myCases.length} Total</span>
+                <button type="button" className="jl-btn dark" onClick={() => setShowNewCase(true)}>
+                  <Icon name="plus" size={14} /> New Case
+                </button>
+              </div>
+            </div>
+
+            <div className="jl-csearch">
+              <Icon name="search" size={14} />
+              <input
+                placeholder="Search docket, case ID, or client..."
+                aria-label="Search my cases"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="jl-chips" role="group" aria-label="Filter cases by status">
+              {filters.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className={`jl-chip${filter === f ? ' on' : ''}`}
+                  onClick={() => setFilter(f)}
+                >
+                  {f} ({counts[f] || 0})
+                </button>
+              ))}
+            </div>
+
+            <div className="jl-list">
+              {myCases.length === 0 && <div className="jl-empty">No cases have been assigned to you yet.</div>}
+              {myCases.length > 0 && visible.length === 0 && <div className="jl-empty">No dockets match your search.</div>}
+              {visible.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`jl-ci${selected && c.id === selected.id ? ' on' : ''}`}
+                  onClick={() => setSelectedId(c.id)}
+                >
+                  <div className="jl-ci1">
+                    <span className="jl-ref">{c.ref}</span>
+                    <span className="jl-tag">{c.type}</span>
+                    <StatusPill label={c.status} className="jl-ml" />
+                  </div>
+                  <div className="jl-ci2">{c.title}</div>
+                  <div className="jl-ci3">
+                    <span>
+                      <Icon name="user" size={12} /> {c.clientLabel}
+                    </span>
+                    <span>
+                      <Icon name="calendar" size={12} /> {prettyDate(c.dateOpened)}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {/* Right: selected case details */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {!selected && (
+            <section className="jl-card">
+              <div className="jl-empty">
+                No case to show yet. When the administrator assigns a case to you, it will appear here.
+              </div>
+            </section>
+          )}
+
+          {selected && (
+            <>
+              <section className="jl-card">
+                <div className="jl-dh">
+                  <div>
+                    <div className="jl-dref">
+                      <span>{selected.ref}</span>
+                      <StatusPill label={selected.status} />
+                    </div>
+                    <h2>{selected.title}</h2>
+                    <div className="jl-muted">
+                      {selected.type} — Opened {prettyDate(selected.dateOpened)}
+                    </div>
+                  </div>
+                  <div className="jl-btns">
+                    <Link to={ROUTES.tasks} className="jl-btn dark">
+                      <Icon name="plus" size={14} /> Log Activity
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="jl-ms">
+                  <div className="jl-ms-h">
+                    <span>TASK PROGRESS</span>
+                    <span className="jl-orange">
+                      {selDone} of {selTasks.length} tasks completed
+                    </span>
+                  </div>
+                  <div className="jl-bar">
+                    <i style={{ width: `${selPct}%` }} />
+                  </div>
+                </div>
+              </section>
+
+              <section className="jl-card">
+                <div className="jl-hd">
+                  <h2 className="jl-h2 ic">
+                    <Icon name="user" size={16} /> Primary Linked Client
+                  </h2>
+                  {client && <span className="jl-total">{client.clientNumber}</span>}
+                </div>
+                {!client && <div className="jl-empty">No client is linked to this case.</div>}
+                {client && (
+                  <div className="jl-cl">
+                    <div className="jl-cl-i">
+                      <div className="jl-cl-av">{initialsOf(`${client.firstName} ${client.surname}`)}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <b>
+                          {client.firstName} {client.surname}
+                        </b>
+                        <div className="jl-cl-l">
+                          {client.idNumber && (
+                            <span>
+                              <Icon name="briefcase" size={12} /> ID: <span className="jl-mono">{client.idNumber}</span>
+                            </span>
+                          )}
+                          {client.email && (
+                            <span>
+                              <Icon name="mail" size={12} /> {client.email}
+                            </span>
+                          )}
+                          {client.phone && (
+                            <span>
+                              <Icon name="phone" size={12} /> {client.phone}
+                            </span>
+                          )}
+                          {client.address && (
+                            <span>
+                              <Icon name="pin" size={12} /> {client.address}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="jl-ret">
+                      <div className="jl-ret-h">
+                        <span>CLIENT NUMBER</span>
+                      </div>
+                      <div className="jl-ret-v jl-mono">{client.clientNumber}</div>
+                      <div className="jl-btns">
+                        {client.email && (
+                          <a className="jl-btn" href={`mailto:${client.email}`}>
+                            <Icon name="mail" size={13} /> Contact
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="jl-card">
+                <h2 className="jl-h2 ic">
+                  <Icon name="scales" size={16} /> Case Brief
+                </h2>
+                <div className="jl-jp">
+                  <div>
+                    <div className="jl-lbl">CASE TYPE</div>
+                    <b>{selected.type || '—'}</b>
+                  </div>
+                  <div>
+                    <div className="jl-lbl">ASSIGNED ATTORNEY</div>
+                    <b>{me.name}</b>
+                    <div className="jl-muted">{me.staffNumber}</div>
+                  </div>
+                  <div>
+                    <div className="jl-lbl">OPENING DATE &amp; STATUS</div>
+                    <b>{prettyDate(selected.dateOpened)}</b>
+                    <div className="jl-orange" style={{ fontSize: 12, fontWeight: 600 }}>
+                      {selected.status}
+                    </div>
+                  </div>
+                </div>
+                <div className="jl-lbl">CASE SUMMARY</div>
+                <p className="jl-sum">{selected.description || 'No case summary has been captured for this docket yet.'}</p>
+              </section>
+
+              <div className="jl-two">
+                <section className="jl-card">
+                  <div className="jl-hd">
+                    <h2 className="jl-h2 ic">
+                      <Icon name="check" size={16} /> Legal Tasks Preview
+                    </h2>
+                    <span className="jl-total">{selTasks.length} Tasks</span>
+                  </div>
+                  {selTasks.length === 0 && <div className="jl-empty">No tasks logged for this docket yet.</div>}
+                  {selTasks.map((t) => {
+                    const tone = t.state === 'Completed' ? 'done' : t.overdue ? 'red' : 'grey';
+                    const icon = tone === 'done' ? 'checkcircle' : tone === 'red' ? 'clock' : 'circle';
+                    return (
+                      <div key={t.id} className="jl-ti">
+                        <span className={`jl-tic ${tone === 'grey' ? '' : tone}`}>
+                          <Icon name={icon} size={14} />
+                        </span>
+                        <div className={`jl-tt${tone === 'done' ? ' done' : ''}`}>
+                          <b>{t.title}</b>
+                          <small>{t.description}</small>
+                        </div>
+                        <span className={`jl-due ${tone}`}>
+                          {tone === 'done' ? 'Done' : `Due ${prettyDate(t.dueDate)}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <Link to={ROUTES.tasks} className="jl-more">
+                    Open All {myTasks.length} Tasks <Icon name="arrow" size={12} />
+                  </Link>
+                </section>
+
+                <section className="jl-card">
+                  <div className="jl-hd">
+                    <h2 className="jl-h2 ic">
+                      <Icon name="folder" size={16} /> Docket Filings &amp; Records
+                    </h2>
+                  </div>
+                  <div className="jl-empty">Document storage is not connected to the system yet.</div>
+                </section>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
+/* ================= Add / Edit task window ================= */
+function TaskModal({ onHide, onSaved, cases, editing }) {
+  const [form, setForm] = useState(
+    editing
+      ? {
+          caseId: editing.caseId,
+          taskName: editing.title,
+          description: editing.description || '',
+          dueDate: editing.dueDate || '',
+          status: editing.state,
+        }
+      : { caseId: cases[0] ? cases[0].id : '', taskName: '', description: '', dueDate: '', status: 'Not Started' }
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+
+  const save = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!form.caseId || !form.taskName.trim() || !form.dueDate) {
+      setError('Case, task name and due date are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = {
+        taskName: form.taskName.trim(),
+        description: form.description.trim(),
+        dueDate: form.dueDate,
+        status: form.status,
+      };
+      let message;
+      if (editing) {
+        await api.put(`/LegalTasks/${editing.id}`, body);
+        message = 'Task updated.';
+      } else {
+        const res = await api.post('/LegalTasks', { ...body, caseId: form.caseId });
+        message = `Task TSK-${String(res.data.id).slice(0, 4).toUpperCase()} was added and saved.`;
+      }
+      await onSaved(message);
+      onHide();
+    } catch (err) {
+      const d = err.response && err.response.data;
+      setError(
+        (d && (d.title || d.message)) ||
+          (err.response && err.response.status === 403
+            ? 'You are not allowed to do that.'
+            : 'Could not save the task. Please try again.')
+      );
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal show onHide={onHide} centered>
+      <Form onSubmit={save}>
+        <Modal.Header closeButton>
+          <Modal.Title>{editing ? 'Edit Legal Task' : 'Add Legal Task'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {error && <Alert variant="danger">{error}</Alert>}
+
+          <Form.Group className="mb-3">
+            <Form.Label>Task ID</Form.Label>
+            <Form.Control
+              readOnly
+              disabled
+              value={editing ? editing.taskId || editing.id : 'Generated automatically when you save'}
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Case</Form.Label>
+            <Form.Select value={form.caseId} onChange={set('caseId')} disabled={!!editing}>
+              {cases.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.ref} — {c.title}
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Task name</Form.Label>
+            <Form.Control value={form.taskName} onChange={set('taskName')} placeholder="e.g. Draft replying affidavit" />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Description</Form.Label>
+            <Form.Control as="textarea" rows={3} value={form.description} onChange={set('description')} />
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label>Due date</Form.Label>
+            <Form.Control type="date" value={form.dueDate} onChange={set('dueDate')} />
+          </Form.Group>
+
+          <Form.Group>
+            <Form.Label>Status</Form.Label>
+            <Form.Select value={form.status} onChange={set('status')}>
+              <option>Not Started</option>
+              <option>In Progress</option>
+              <option>Completed</option>
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={onHide} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="dark" type="submit" disabled={saving}>
+            {saving ? 'Saving...' : editing ? 'Save changes' : 'Add task'}
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
+/* ================= Page 2: Legal Tasks & Activities ================= */
+export function LegalTasksPage({ withShell = false }) {
+  const { me, myCases, myTasks } = useMine();
+  const { refreshData } = useData();
+  const [filter, setFilter] = useState('All Tasks');
+  const [modal, setModal] = useState(null); // null, 'new', or the task being edited
+  const [notice, setNotice] = useState('');
+
+  const all = myTasks.map((t) => ({
+    id: t.taskId || t.id,
+    key: t.id,
+    task: t,
+    title: t.title,
+    desc: t.description || '—',
+    date: prettyDate(t.dueDate),
+    dateNote: t.overdue ? 'Overdue' : t.theCase.ref,
+    dateTone: t.state === 'Completed' ? 'ok' : t.overdue ? 'warn' : 'muted',
+    counsel: me.name,
+    counselNote: t.theCase.title,
+    status: t.state,
+  }));
+
+  const active = TRACKER_FILTERS.find((f) => f.key === filter) || TRACKER_FILTERS[0];
+  const rows = all.filter(active.match);
+  const done = all.filter((t) => t.status === 'Completed').length;
+  const total = all.length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  return (
+    <Shell withShell={withShell}>
+      <section className="jl-card">
+        <div className="jl-ph">
+          <div>
+            <div className="jl-lbl jl-orange">ACTIVE DOCKET EXECUTION • {myCases.length} ASSIGNED DOCKETS</div>
+            <h1>{'Legal Activity & Milestone Tracker'}</h1>
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="jl-btn dark"
+              disabled={myCases.length === 0}
+              style={myCases.length === 0 ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+              title={myCases.length === 0 ? 'You need an assigned case before you can add a task' : ''}
+              onClick={() => setModal('new')}
+            >
+              <Icon name="plus" size={14} /> Add Task
+            </button>
+            <div className="jl-fin">
+              <div>
+                <span>TASK COMPLETION TRACK</span>
+                <b>{pct}%</b>
+              </div>
+              <div className="jl-bar">
+                <i style={{ width: `${pct}%` }} />
+              </div>
+              <div className="jl-muted">
+                {done} of {total} tasks completed
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {myCases.length === 0 && (
+          <div className="jl-muted" style={{ marginTop: 12 }}>
+            You have no assigned cases yet. Ask the administrator to assign a case to you, then you can add tasks.
+          </div>
+        )}
+        {notice && (
+          <Alert variant="success" dismissible onClose={() => setNotice('')} style={{ marginTop: 12, marginBottom: 0 }}>
+            {notice}
+          </Alert>
+        )}
+
+        <div className="jl-chips" style={{ marginTop: 16, marginBottom: 0 }} role="group" aria-label="Filter tasks by status">
+          {TRACKER_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={`jl-chip${filter === f.key ? ' on' : ''}`}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.key} ({all.filter(f.match).length})
+            </button>
+          ))}
+        </div>
+
+        <div className="jl-tw">
+          <table className="jl-table">
+            <thead>
+              <tr>
+                <th>TASK ID</th>
+                <th>MILESTONE / ACTION ITEM</th>
+                <th>TARGET / COMPLETION</th>
+                <th>SUPERVISING COUNSEL</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="jl-empty">
+                    No tasks in this view.
+                  </td>
+                </tr>
+              )}
+              {rows.map((t) => (
+                <tr key={t.key}>
+                  <td>
+                    <span className={`jl-tid jl-mono${t.status === 'Not Started' ? ' muted' : ''}`}>{t.id}</span>
+                  </td>
+                  <td>
+                    <b>{t.title}</b>
+                    <small>{t.desc}</small>
+                  </td>
+                  <td>
+                    {t.date}
+                    <small className={t.dateTone === 'ok' ? 'jl-tone-ok' : t.dateTone === 'warn' ? 'jl-tone-warn' : ''}>
+                      {t.dateNote}
+                    </small>
+                  </td>
+                  <td>
+                    {t.counsel}
+                    <small>{t.counselNote}</small>
+                  </td>
+                  <td>
+                    <span className={`jl-stat ${t.status.replace(' ', '').toLowerCase()}`}>{t.status.toUpperCase()}</span>
+                  </td>
+                  <td>
+                    <button type="button" className="jl-btn" onClick={() => setModal(t.task)}>
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="jl-notice">
+          <b>Legal Notice &amp; Docket Integrity Protocol</b>
+          Legal task timelines, statuses, and docket filings are strictly maintained and verified by JusticeLaw Attorneys
+          in compliance with the Legal Practice Act (Act No. 28 of 2014) and the respective High Court Rules. {done} of{' '}
+          {total} listed tasks are completed.
+        </div>
+      </section>
+
+      {modal && (
+        <TaskModal
+          cases={myCases}
+          editing={modal === 'new' ? null : modal}
+          onHide={() => setModal(null)}
+          onSaved={async (message) => {
+            await refreshData();
+            setNotice(message);
+          }}
+        />
+      )}
+    </Shell>
+  );
+}
+
 /* ================= Page 3: My Cases (same case workspace, no profile header) ================= */
 export function MyCasesPage(props) {
   return <AttorneyDashboard {...props} casesOnly />;

@@ -64,10 +64,21 @@ namespace JusticeLaw.API.Controllers
             return Ok(query.ToList());
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Attorney")]
         [HttpPost]
         public IActionResult AddCase(AddCaseDto addCaseDto)
         {
+            var attorneyId = addCaseDto.AttorneyId;
+
+            // An attorney can only create cases for themselves
+            if (!User.IsInRole("Admin"))
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var me = dbContext.Attorneys.FirstOrDefault(a => a.UserId == userId);
+                if (me == null) return Forbid();
+                attorneyId = me.Id;
+            }
+
             var caseEntity = new Case()
             {
                 CaseNumber = addCaseDto.CaseNumber,
@@ -77,7 +88,7 @@ namespace JusticeLaw.API.Controllers
                 CaseStatus = addCaseDto.CaseStatus,
                 CaseTypeId = addCaseDto.CaseTypeId,
                 ClientId = addCaseDto.ClientId,
-                AttorneyId = addCaseDto.AttorneyId
+                AttorneyId = attorneyId
             };
 
             dbContext.Cases.Add(caseEntity);
