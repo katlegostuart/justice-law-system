@@ -59,6 +59,12 @@ export default function Tasks() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Always show the latest tasks when this page opens
+  useEffect(() => {
+    refreshData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const caseOf = (caseNumber) => cases.find((c) => c.caseNumber === caseNumber);
 
   // ---- stats ----

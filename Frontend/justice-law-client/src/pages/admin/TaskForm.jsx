@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Row, Col, Button, Form, Alert } from 'react-bootstrap';
 import Icon from '../../components/Icon';
 import { useData } from '../../context/DataContext';
-import { TASK_STATUSES, todayIso, nextTaskId } from '../../services/taskConfig';
+import { TASK_STATUSES, todayIso } from '../../services/taskConfig';
 import api from '../../services/api';
 
 const emptyForm = () => ({
@@ -29,7 +29,7 @@ function validate(form, editing) {
 export default function TaskForm() {
   const { id: editingId } = useParams();
   const navigate = useNavigate();
-  const { attorneys, cases, tasks } = useData();
+  const { attorneys, cases, tasks, refreshData } = useData();
 
   const existing = editingId ? tasks.find((t) => t.id === editingId) : null;
   const editing = !!editingId;
@@ -46,6 +46,7 @@ export default function TaskForm() {
     };
   });
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const goBack = (state) => navigate('/admin/tasks', { state });
 
@@ -83,17 +84,23 @@ export default function TaskForm() {
       caseId: selectedCase?.id
     };
 
+    setSaving(true);
     try {
       if (editing) {
         await api.put(`/LegalTasks/${existing.id}`, payload);
-        goBack({ message: `Task updated.` });
       } else {
         await api.post('/LegalTasks', payload);
-        goBack({ message: `Task created.` });
       }
+      await refreshData(); // reload the task list before going back
+      goBack({ message: editing ? 'Task updated.' : 'Task created.' });
     } catch (err) {
-      alert("Error saving task: " + err.message);
+      const d = err.response?.data;
+      const reason = d?.errors ? Object.values(d.errors).flat().join(' ')
+                  : typeof d === 'string' && d ? d : err.message;
+      alert('Error saving task: ' + reason);
+      setSaving(false);
     }
+
   };
 
   // New tasks can only go on open cases; when editing, keep the task's current case in the list
@@ -117,8 +124,8 @@ export default function TaskForm() {
             <Row className="g-3">
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>Task ID (auto-generated)</Form.Label>
-                  <Form.Control value={editing ? existing.taskId : nextTaskId(tasks)} readOnly style={{ fontWeight: 700 }} />
+                  <Form.Label>Task ID</Form.Label>
+                  <Form.Control value={editing ? existing.taskId : 'Assigned automatically when saved'} readOnly style={{ fontWeight: 700 }} />
                 </Form.Group>
               </Col>
               <Col md={6}>
@@ -189,7 +196,9 @@ export default function TaskForm() {
 
             <div className="form-actions">
               <Button variant="outline-secondary" onClick={() => goBack()}>Cancel</Button>
-              <Button type="submit" variant="primary">{editing ? 'Save changes' : 'Create Task'}</Button>
+              <Button type="submit" variant="primary" disabled={saving}>
+                {saving ? 'Saving...' : editing ? 'Save changes' : 'Create Task'}
+              </Button>
             </div>
           </Form>
         </div>

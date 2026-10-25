@@ -103,7 +103,7 @@ export function DataProvider({ children }) {
 
       setTasks(rawTasks.map((t) => ({
         id: t.id,
-        taskId: `TSK-${String(t.id).replace(/-/g, '').slice(-4).toUpperCase()}`, // display ID
+        taskId: t.taskNumber || `TSK-${String(t.id).replace(/-/g, '').slice(-4).toUpperCase()}`,
         title: t.taskName,
         name: t.taskName,
         description: t.description,
