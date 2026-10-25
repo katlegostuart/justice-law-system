@@ -21,5 +21,7 @@ namespace JusticeLaw.API.Models.Entities
         // Foreign key + navigation: Legal Task -> Case
         public Guid CaseId { get; set; }
         public Case? Case { get; set; }
+        [StringLength(20)]
+        public string TaskNumber { get; set; } = string.Empty;
     }
 }

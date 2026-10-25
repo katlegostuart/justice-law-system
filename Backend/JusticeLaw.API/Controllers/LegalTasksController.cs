@@ -82,6 +82,7 @@ namespace JusticeLaw.API.Controllers
 
             var taskEntity = new LegalTask()
             {
+                TaskNumber = NextTaskNumber(),
                 TaskName = addTaskDto.TaskName,
                 Description = addTaskDto.Description,
                 DueDate = addTaskDto.DueDate,
@@ -93,6 +94,21 @@ namespace JusticeLaw.API.Controllers
             dbContext.SaveChanges();
 
             return Ok(taskEntity);
+        }
+
+        // Next free task number across ALL tasks (not just the ones this user can see): TSK-001, TSK-002...
+        private string NextTaskNumber()
+        {
+            var highest = dbContext.LegalTasks
+                .Select(t => t.TaskNumber)
+                .ToList()
+                .Select(n => System.Text.RegularExpressions.Regex.Match(n ?? "", @"^TSK-(\d{1,6})$"))
+                .Where(m => m.Success)
+                .Select(m => int.Parse(m.Groups[1].Value))
+                .DefaultIfEmpty(0)
+                .Max();
+
+            return $"TSK-{highest + 1:D3}";
         }
 
         // GET: api/LegalTasks/{id}

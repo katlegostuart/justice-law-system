@@ -27,6 +27,7 @@ namespace JusticeLaw.API.Data
             modelBuilder.Entity<Client>().HasIndex(c => c.ClientNumber).IsUnique();
             modelBuilder.Entity<Attorney>().HasIndex(a => a.StaffNumber).IsUnique();
             modelBuilder.Entity<Case>().HasIndex(c => c.CaseNumber).IsUnique();
+            modelBuilder.Entity<LegalTask>().HasIndex(t => t.TaskNumber).IsUnique();
 
             // Don't allow deleting a Client, Attorney or Case Type that still has cases
             modelBuilder.Entity<Case>()

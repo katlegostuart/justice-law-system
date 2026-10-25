@@ -237,9 +237,17 @@ namespace JusticeLaw.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("TaskNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CaseId");
+
+                    b.HasIndex("TaskNumber")
+                        .IsUnique();
 
                     b.ToTable("LegalTasks");
                 });
