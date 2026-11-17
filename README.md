@@ -33,16 +33,6 @@ A group project for IWDV202: Web Applications Development
 
 ---
 
-## Repository Structure
-
-```
-justice-law-system/
-├── JusticeLaw.API/          # ASP.NET Core 8 Web API
-└── justice-law-client/      # React frontend
-```
-
----
-
 ## Database Design
 
 The database is built Code-First with EF Core. The main tables are:
