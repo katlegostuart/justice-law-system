@@ -10,7 +10,7 @@ A group project for IWDV202: Web Applications Development
 
 ## Features
 
-- **Role-based access** (Admin, Attorney, Client) using ASP.NET Core Identity
+- **Role-based access** (Admin, Attorney, Client) using ASP.NET Core Identity and JWT authentication
 - **Client management**: register and maintain client records
 - **Attorney management**: maintain attorney profiles
 - **Case management**: create and track legal cases by case type
@@ -27,8 +27,8 @@ A group project for IWDV202: Web Applications Development
 | Backend | ASP.NET Core 8 Web API (C#) |
 | ORM | Entity Framework Core (Code-First, migrations) |
 | Database | Microsoft SQL Server |
-| Authentication | ASP.NET Core Identity (Admin / Attorney / Client roles) |
-| Frontend | React with React-Bootstrap |
+| Authentication | ASP.NET Core Identity with JWT (Admin / Attorney / Client roles) |
+| Frontend | React (Vite) with React-Bootstrap |
 | Version control | Git and GitHub |
 
 ---
@@ -68,66 +68,11 @@ erDiagram
 
 ---
 
-## Getting Started
-
-### Prerequisites
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Node.js](https://nodejs.org/) (LTS) and npm
-- SQL Server (LocalDB, Express or full) and a tool such as SSMS or Azure Data Studio
-- Visual Studio 2022 (recommended for the API) or the .NET CLI
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/katlegostuart/justice-law-system.git
-cd justice-law-system
-```
-
-### 2. Set up the database and API
-
-1. Open `JusticeLaw.API/appsettings.json` and set your SQL Server connection string:
-
-   ```json
-   "ConnectionStrings": {
-     "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=JusticeLawDb;Trusted_Connection=True;"
-   }
-   ```
-
-2. Apply the migrations to create the database:
-
-   ```bash
-   cd JusticeLaw.API
-   dotnet ef database update
-   ```
-
-   In Visual Studio you can instead run `Update-Database` in the Package Manager Console.
-
-3. Start the API:
-
-   ```bash
-   dotnet run
-   ```
-
-   The API will start on the URL shown in the console (Swagger UI is available at `/swagger` if enabled).
-
-### 3. Run the frontend
-
-```bash
-cd justice-law-client
-npm install
-npm run dev
-```
-
-Make sure the API base URL in the frontend config matches the URL your API is running on.
-
----
-
 ## Roles
 
 | Role | What they can do |
 | --- | --- |
-| **Admin** | Manage users, attorneys, clients, case types and cases |
+| **Admin** | Manage users, attorneys, clients, case types and cases, and create logins for attorneys and clients |
 | **Attorney** | View and manage their assigned cases and tasks |
 | **Client** | View their own cases and progress |
 
@@ -135,23 +80,14 @@ Make sure the API base URL in the frontend config matches the URL your API is ru
 
 ## API Overview
 
-Interactive documentation is available through Swagger UI when the API is running.
-
-### Using the API in Swagger
-
-Most endpoints are protected, so log in first:
-
-1. Call `POST /api/Auth/register` to create an account, or use an existing one.
-2. Call `POST /api/Auth/login` and copy the token from the response.
-3. Click the **Authorize** button at the top of the Swagger page and paste the token in.
-4. The padlocks now apply to your requests, and you can call the protected endpoints.
+The API is documented with Swagger UI. Endpoints are protected with JWT authentication: users log in to receive a token, and new logins are created by an Admin.
 
 ### Auth
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/api/Auth/register` | Register a new user |
-| `POST` | `/api/Auth/login` | Log in |
+| `POST` | `/api/Auth/register` | Create a login for an attorney or client record (Admin only) |
+| `POST` | `/api/Auth/login` | Log in and receive a token |
 
 ### Me
 
@@ -229,7 +165,7 @@ Most endpoints are protected, so log in first:
 ## What We Learned
 
 - Designing a relational schema and building it Code-First with EF Core migrations
-- Securing an API with ASP.NET Core Identity and role-based authorisation
+- Securing an API with ASP.NET Core Identity, JWT and role-based authorisation
 - Collaborating as a team of four using Git and GitHub
 
 ---
