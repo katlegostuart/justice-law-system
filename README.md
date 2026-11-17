@@ -15,7 +15,8 @@ A group project for IWDV202: Web Applications Development
 - **Attorney management**: maintain attorney profiles
 - **Case management**: create and track legal cases by case type
 - **Task management**: assign and track tasks within each case
-- **Search endpoints** for finding clients, cases and more
+- **Search endpoints** for finding attorneys, clients and cases
+- **Task lookup by case**: fetch every task that belongs to a given case
 
 ---
 
@@ -134,14 +135,83 @@ Make sure the API base URL in the frontend config matches the URL your API is ru
 
 ## API Overview
 
+Interactive documentation is available through Swagger UI when the API is running.
+
+### Using the API in Swagger
+
+Most endpoints are protected, so log in first:
+
+1. Call `POST /api/Auth/register` to create an account, or use an existing one.
+2. Call `POST /api/Auth/login` and copy the token from the response.
+3. Click the **Authorize** button at the top of the Swagger page and paste the token in.
+4. The padlocks now apply to your requests, and you can call the protected endpoints.
+
+### Auth
+
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/api/auth/login` | Log in and receive a token |
-| `GET` | `/api/clients` | List clients |
-| `GET` | `/api/clients/search?query=` | Search clients |
-| `GET` | `/api/cases` | List cases |
-| `GET` | `/api/cases/search?query=` | Search cases |
-| `GET` | `/api/tasks` | List tasks |
+| `POST` | `/api/Auth/register` | Register a new user |
+| `POST` | `/api/Auth/login` | Log in |
+
+### Me
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/Me` | Get the currently logged-in user |
+
+### Attorneys
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/Attorneys` | List attorneys |
+| `POST` | `/api/Attorneys` | Create an attorney |
+| `GET` | `/api/Attorneys/{id}` | Get one attorney |
+| `PUT` | `/api/Attorneys/{id}` | Update an attorney |
+| `DELETE` | `/api/Attorneys/{id}` | Delete an attorney |
+| `GET` | `/api/Attorneys/search` | Search attorneys |
+
+### Clients
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/Clients` | List clients |
+| `POST` | `/api/Clients` | Create a client |
+| `GET` | `/api/Clients/{id}` | Get one client |
+| `PUT` | `/api/Clients/{id}` | Update a client |
+| `DELETE` | `/api/Clients/{id}` | Delete a client |
+| `GET` | `/api/Clients/search` | Search clients |
+
+### Cases
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/Cases` | List cases |
+| `POST` | `/api/Cases` | Create a case |
+| `GET` | `/api/Cases/{id}` | Get one case |
+| `PUT` | `/api/Cases/{id}` | Update a case |
+| `DELETE` | `/api/Cases/{id}` | Delete a case |
+| `GET` | `/api/Cases/search` | Search cases |
+
+### Case Types
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/CaseTypes` | List case types |
+| `POST` | `/api/CaseTypes` | Create a case type |
+| `GET` | `/api/CaseTypes/{id}` | Get one case type |
+| `PUT` | `/api/CaseTypes/{id}` | Update a case type |
+| `DELETE` | `/api/CaseTypes/{id}` | Delete a case type |
+
+### Legal Tasks
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/LegalTasks` | List tasks |
+| `POST` | `/api/LegalTasks` | Create a task |
+| `GET` | `/api/LegalTasks/{id}` | Get one task |
+| `PUT` | `/api/LegalTasks/{id}` | Update a task |
+| `DELETE` | `/api/LegalTasks/{id}` | Delete a task |
+| `GET` | `/api/LegalTasks/case/{caseId}` | List all tasks for a case |
 
 ---
 
@@ -160,15 +230,7 @@ Make sure the API base URL in the frontend config matches the URL your API is ru
 
 - Designing a relational schema and building it Code-First with EF Core migrations
 - Securing an API with ASP.NET Core Identity and role-based authorisation
-- Collaborating as a team using Git and GitHub
-
----
-
-## Future Improvements
-
-- Document uploads for cases
-- Email or in-app notifications for task deadlines
-- Automated tests for the API
+- Collaborating as a team of four using Git and GitHub
 
 ---
 
